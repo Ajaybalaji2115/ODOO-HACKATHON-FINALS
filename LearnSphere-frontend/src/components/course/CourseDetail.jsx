@@ -13,7 +13,7 @@ import QuizBuilder from '../quiz/QuizBuilder'
 import {
   ArrowLeft, BookOpen, Users, Clock, Award, Play, FileText,
   CheckCircle, Plus, Edit, Trash2, Upload, ChevronDown, ChevronUp, X, Eye,
-  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles
+  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles, Circle
 } from 'lucide-react'
 import Card from '../common/Card'
 import Loader from '../common/Loader'
@@ -25,6 +25,7 @@ import api from "../../services/api";
 import { progressService } from "../../services/progressService";
 import CertificateDownload from '../certificate/CertificateDownload'
 import ConfirmModal from '../common/ConfirmModal'
+import ReviewSection from './ReviewSection'
 
 
 const CourseDetail = () => {
@@ -117,12 +118,59 @@ const CourseDetail = () => {
 
   // Track completed topics for green checkmarks
   const [completedTopicIds, setCompletedTopicIds] = useState(new Set());
+  const [completedMaterialIds, setCompletedMaterialIds] = useState(new Set());
+  const [topicQuizzes, setTopicQuizzes] = useState({}); // Store quizzes per topic
 
   useEffect(() => {
     if (user?.role === 'STUDENT' && user.studentId && courseId) {
       fetchTopicProgress();
+
+      // Fetch completed materials
+      import('../../services/materialProgressService').then(m => {
+        m.materialProgressService.getCompletedMaterials(user.studentId)
+          .then(res => {
+            if (res.data) {
+              setCompletedMaterialIds(new Set(res.data));
+            }
+          })
+          .catch(err => console.error("Failed to fetch material progress", err));
+      });
     }
   }, [user, courseId]);
+
+  const handleToggleMaterial = async (materialId, e) => {
+    e.stopPropagation();
+    if (!isStudent || !isEnrolled) return;
+
+    // Optimistic update
+    const isCompleted = completedMaterialIds.has(materialId);
+    const newSet = new Set(completedMaterialIds);
+    if (isCompleted) {
+      newSet.delete(materialId);
+      // Note: Backend might not support "un-complete" easily if it's an append-only log, 
+      // but we'll assume toggle for UI. 
+      // If backend doesn't support unchecking, this might revert on refresh.
+    } else {
+      newSet.add(materialId);
+      try {
+        // Call backend to mark complete
+        // We need studentId. 
+        if (user?.studentId) {
+          await import('../../services/materialProgressService').then(m => m.materialProgressService.markMaterialCompleted(user.studentId, materialId));
+          toast.success("Marked as done");
+        }
+      } catch (err) {
+        console.error("Failed to mark material", err);
+        toast.error("Failed to update progress");
+        // Revert
+        newSet.delete(materialId);
+        if (isCompleted) newSet.add(materialId); // restore
+        setCompletedMaterialIds(newSet);
+        return;
+      }
+    }
+    setCompletedMaterialIds(newSet);
+  };
 
   const fetchTopicProgress = async () => {
     try {
@@ -1391,6 +1439,38 @@ const CourseDetail = () => {
                                       onClick={() => handleMaterialClick(material, topic.id)}
                                     >
                                       <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                        {/* Completion Radio Button */}
+                                        {isStudent && isEnrolled && (
+                                          <div
+                                            onClick={(e) => {
+                                              if (material.materialType !== 'VIDEO') {
+                                                handleToggleMaterial(material.id, e);
+                                              }
+                                            }}
+                                            className={`cursor-pointer mr-1 transition-colors ${material.materialType === 'VIDEO'
+                                              ? (completedMaterialIds.has(material.id) ? "text-green-500 cursor-default" : "text-gray-300 cursor-default")
+                                              : "text-gray-400 hover:text-green-500"
+                                              }`}
+                                            title={
+                                              material.materialType === 'VIDEO'
+                                                ? (completedMaterialIds.has(material.id) ? "Completed" : "Watch video to complete")
+                                                : (completedMaterialIds.has(material.id) ? "Mark as incomplete" : "Mark as done")
+                                            }
+                                          >
+                                            {completedMaterialIds.has(material.id) ? (
+                                              <CheckCircle
+                                                size={24}
+                                                className="text-green-500 fill-green-100"
+                                              />
+                                            ) : (
+                                              <Circle
+                                                size={24}
+                                                className="text-gray-300 hover:text-green-500 transition-colors"
+                                              />
+                                            )}
+                                          </div>
+                                        )}
+
                                         <div className={`${iconData.bg} p-2 rounded-lg relative flex-shrink-0`}>
                                           <div className={iconData.color}>
                                             {iconData.component}
@@ -1469,6 +1549,19 @@ const CourseDetail = () => {
                           <div className="p-4 border-t border-gray-200 bg-gradient-to-r from-purple-50 to-white">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-3">
+                                {/* Quiz Completion Radio Button */}
+                                {isStudent && isEnrolled && topicQuizzes[topic.id] && (
+                                  <div
+                                    onClick={(e) => handleToggleMaterial(topicQuizzes[topic.id].id, e)}
+                                    className="cursor-pointer mr-1 text-gray-400 hover:text-green-500 transition-colors"
+                                    title={completedMaterialIds.has(topicQuizzes[topic.id].id) ? "Mark as incomplete" : "Mark as done"}
+                                  >
+                                    <CheckCircle
+                                      size={24}
+                                      className={completedMaterialIds.has(topicQuizzes[topic.id].id) ? "text-green-500 fill-green-100" : "text-gray-300"}
+                                    />
+                                  </div>
+                                )}
                                 <div className="w-12 h-12 rounded-lg bg-purple-600 text-white flex items-center justify-center">
                                   <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                     <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -1548,6 +1641,10 @@ const CourseDetail = () => {
               </div>
             )}
           </Card>
+
+          {/* Review Section */}
+          <ReviewSection courseId={courseId} user={user} isEnrolled={isEnrolled} />
+
         </div>
 
         {/* Sidebar */}
@@ -1618,6 +1715,38 @@ const CourseDetail = () => {
                     )}
                   </button>
                 )
+              )}
+
+              {/* Progress Summary Box */}
+              {isStudent && isEnrolled && courseProgress && (
+                <div className="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-semibold text-gray-800 text-lg">
+                      {Math.round(courseProgress.percentage)}% Completed
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-gray-300 rounded-full overflow-hidden mb-4 border border-gray-300">
+                    <div
+                      className="h-full bg-green-500 rounded-full transition-all duration-500"
+                      style={{ width: `${courseProgress.percentage}%` }}
+                    ></div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center font-handwriting">
+                    <div className="p-2 bg-white rounded-md border border-gray-300 shadow-sm">
+                      <div className="text-xl font-bold text-gray-800">{courseProgress.totalTopics}</div>
+                      <div className="text-xs font-semibold text-gray-600">Content</div>
+                    </div>
+                    <div className="p-2 bg-white rounded-md border border-gray-300 shadow-sm">
+                      <div className="text-xl font-bold text-gray-800">{courseProgress.completedTopics}</div>
+                      <div className="text-xs font-semibold text-gray-600">Completed</div>
+                    </div>
+                    <div className="p-2 bg-white rounded-md border border-gray-300 shadow-sm">
+                      <div className="text-xl font-bold text-gray-800">{Math.max(0, courseProgress.totalTopics - courseProgress.completedTopics)}</div>
+                      <div className="text-xs font-semibold text-gray-600">Incomplete</div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               <div className="pt-6 border-t space-y-3">
@@ -2008,6 +2137,15 @@ const CourseDetail = () => {
                 material={selectedMaterial}
                 topicId={selectedMaterial?.topicId}
                 onClose={() => setSelectedMaterial(null)}
+                onComplete={(materialId) => {
+                  console.log("Material completed:", materialId);
+                  // Update local state to show green check
+                  setCompletedMaterialIds(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(materialId);
+                    return newSet;
+                  });
+                }}
               />
             )}
           </>

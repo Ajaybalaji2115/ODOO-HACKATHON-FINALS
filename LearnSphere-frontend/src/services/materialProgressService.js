@@ -16,5 +16,10 @@ export const materialProgressService = {
   async addTime(studentId, topicId, seconds) {
     const response = await api.post('/progress/topic/add-time', { studentId, topicId, seconds })
     return response.data
+  },
+
+  async getCompletedMaterials(studentId) {
+    const response = await api.get(`/progress/student/${studentId}/materials`)
+    return response.data
   }
 }

@@ -144,4 +144,29 @@ public class ProgressController {
         private Long topicId;
         private Long seconds; // seconds to add
     }
+
+    @PostMapping("/material/complete")
+    public ResponseEntity<ApiResponse<com.example.skillforge.model.entity.TopicMaterialProgress>> completeMaterial(@RequestBody MaterialCompleteRequest req) {
+        if (req.getStudentId() == null || req.getMaterialId() == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("studentId and materialId are required"));
+        }
+        com.example.skillforge.model.entity.TopicMaterialProgress tmp = topicProgressService.markMaterialCompleted(req.getStudentId(), req.getMaterialId());
+        return ResponseEntity.ok(ApiResponse.success("Material completed", tmp));
+    }
+
+    @Data
+    public static class MaterialCompleteRequest {
+        private Long studentId;
+        private Long materialId;
+    }
+
+    @GetMapping("/student/{studentId}/materials")
+    public ResponseEntity<ApiResponse<List<Long>>> getCompletedMaterials(@PathVariable Long studentId) {
+        List<com.example.skillforge.model.entity.TopicMaterialProgress> list = topicProgressService.getMaterialProgressForStudent(studentId);
+        List<Long> completedIds = list.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getCompleted()))
+                .map(com.example.skillforge.model.entity.TopicMaterialProgress::getMaterialId)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success("Completed materials fetched", completedIds));
+    }
 }

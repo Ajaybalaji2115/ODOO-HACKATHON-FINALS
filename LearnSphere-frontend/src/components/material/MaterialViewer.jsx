@@ -785,7 +785,7 @@ import api from "../../services/api";
 import { useSelector } from "react-redux";
 import toast from "react-hot-toast";
 
-const MaterialViewer = ({ material, topicId, onClose }) => {
+const MaterialViewer = ({ material, topicId, onClose, onComplete }) => {
   const { user } = useSelector((state) => state.auth);
 
   // ⏳ Simple Timer State
@@ -849,13 +849,21 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
     }
   };
 
-  // VIDEO LOGIC ---------------------------------------------------
+  // Track max watched time to prevent skipping
+  const [maxWatchedTime, setMaxWatchedTime] = useState(0);
+
   const handleLoadedMetadata = () => {
     if (videoRef.current) setDuration(videoRef.current.duration);
   };
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+    if (videoRef.current) {
+      const currentTime = videoRef.current.currentTime;
+      setCurrentTime(currentTime);
+      if (currentTime > maxWatchedTime) {
+        setMaxWatchedTime(currentTime);
+      }
+    }
   };
 
   const handlePlayPause = () => {
@@ -878,8 +886,14 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
 
   const handleSeek = (e) => {
     const seekTime = (e.target.value / 100) * duration;
-    if (videoRef.current) videoRef.current.currentTime = seekTime;
-    setCurrentTime(seekTime);
+    // Allow seeking only up to maxWatchedTime (plus a small buffer like 1s)
+    if (seekTime <= maxWatchedTime + 1) {
+      if (videoRef.current) videoRef.current.currentTime = seekTime;
+      setCurrentTime(seekTime);
+    } else {
+      // Prevent seeking forward
+      toast.error("You cannot skip ahead!");
+    }
   };
 
   const handleFullscreen = () => {
@@ -892,8 +906,26 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
     return `${m}:${s < 10 ? "0" : ""}${s}`;
   };
 
-  const handleEnded = () => {
+  const handleEnded = async () => {
+    console.log("Video ended", material.id);
     setIsPlaying(false);
+    // Mark as completed when video ends
+    try {
+      if (onComplete) {
+        console.log("Calling onComplete callback");
+        onComplete(material.id);
+      }
+
+      if (user?.studentId || user?.userId) {
+        // Use studentId if available, fallback to userId
+        const idToUse = user.studentId || user.userId;
+        await import('../../services/materialProgressService').then(m => m.materialProgressService.markMaterialCompleted(idToUse, material.id));
+        toast.success("Lesson Completed!");
+      }
+    } catch (err) {
+      console.error("Failed to mark completed:", err);
+      toast.error("Failed to save progress");
+    }
   };
 
   const handleDownload = () => {

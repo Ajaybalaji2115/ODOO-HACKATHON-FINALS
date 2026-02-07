@@ -20,14 +20,21 @@ public class TopicProgressService {
     private final TopicRepository topicRepository;
     private final CourseProgressRepository courseProgressRepository;
     private final CourseProgressService courseProgressService;
+    private final com.example.skillforge.repository.TopicMaterialProgressRepository topicMaterialProgressRepository;
+    private final com.example.skillforge.repository.MaterialRepository materialRepository;
 
     public TopicProgressService(TopicProgressRepository topicProgressRepository,
                                 TopicRepository topicRepository,
-                                CourseProgressRepository courseProgressRepository, CourseProgressService courseProgressService) {
+                                CourseProgressRepository courseProgressRepository, 
+                                CourseProgressService courseProgressService,
+                                com.example.skillforge.repository.TopicMaterialProgressRepository topicMaterialProgressRepository,
+                                com.example.skillforge.repository.MaterialRepository materialRepository) {
         this.topicProgressRepository = topicProgressRepository;
         this.topicRepository = topicRepository;
         this.courseProgressRepository = courseProgressRepository;
         this.courseProgressService = courseProgressService;
+        this.topicMaterialProgressRepository = topicMaterialProgressRepository;
+        this.materialRepository = materialRepository;
     }
 
     /**
@@ -167,5 +174,55 @@ public class TopicProgressService {
 
     public List<TopicProgress> getProgressForStudent(Long studentId) {
         return topicProgressRepository.findByStudentId(studentId);
+    }
+
+    @Transactional
+    public com.example.skillforge.model.entity.TopicMaterialProgress markMaterialCompleted(Long studentId, Long materialId) {
+        // 1. Find Material to get Topic
+        com.example.skillforge.model.entity.Material material = materialRepository.findById(materialId)
+                .orElseThrow(() -> new RuntimeException("Material not found"));
+        Long topicId = material.getTopic().getId();
+
+        // 2. Save TopicMaterialProgress
+        com.example.skillforge.model.entity.TopicMaterialProgress tmp = topicMaterialProgressRepository
+                .findByStudentIdAndMaterialId(studentId, materialId)
+                .orElseGet(() -> {
+                    com.example.skillforge.model.entity.TopicMaterialProgress t = new com.example.skillforge.model.entity.TopicMaterialProgress();
+                    t.setStudentId(studentId);
+                    t.setMaterialId(materialId);
+                    return t;
+                });
+        
+        if (!Boolean.TRUE.equals(tmp.getCompleted())) {
+             tmp.setCompleted(true);
+             tmp.setCompletedAt(LocalDateTime.now());
+             tmp = topicMaterialProgressRepository.save(tmp);
+        }
+
+        // 3. Check if ALL materials in this topic are completed
+        // Get all material IDs for topic
+        List<Long> allMaterialIds = materialRepository.findMaterialIdsByTopicId(topicId);
+        
+        // Get all completed material IDs for student & topic
+        // We can optimize this query in repo, but for now:
+        List<com.example.skillforge.model.entity.TopicMaterialProgress> studentProgress = 
+                topicMaterialProgressRepository.findByStudentIdAndMaterialIdIn(studentId, allMaterialIds);
+        
+        long completedCount = studentProgress.stream().filter(p -> Boolean.TRUE.equals(p.getCompleted())).count();
+
+        // Note: studentProgress might miss materials that haven't been started yet (so they are not in DB).
+        // If completedCount == allMaterialIds.size(), then all are done.
+        
+        boolean allDone = (completedCount == allMaterialIds.size());
+        
+        if (allDone) {
+            markTopicCompleted(studentId, topicId);
+        }
+
+        return tmp;
+    }
+
+    public List<com.example.skillforge.model.entity.TopicMaterialProgress> getMaterialProgressForStudent(Long studentId) {
+        return topicMaterialProgressRepository.findByStudentId(studentId);
     }
 }
