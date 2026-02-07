@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { login } from '../../store/slices/authSlice'
+import { login, googleLogin } from '../../store/slices/authSlice'
 import { Mail, Lock, LogIn, BookOpen, Eye, EyeOff, AlertCircle, ArrowLeft } from 'lucide-react'
 import Input from '../common/Input'
 import Button from '../common/Button'
+import { GoogleLogin } from '@react-oauth/google'
+import toast from 'react-hot-toast'
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -16,7 +18,12 @@ const Login = () => {
 
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const location = useLocation()
   const { loading, error } = useSelector((state) => state.auth)
+
+  // Get redirect URL from query params
+  const searchParams = new URLSearchParams(location.search)
+  const redirectUrl = searchParams.get('redirect') || '/dashboard'
 
   const validateForm = () => {
     const newErrors = {}
@@ -48,8 +55,21 @@ const Login = () => {
 
     const result = await dispatch(login(formData))
     if (result.type === 'auth/login/fulfilled') {
-      navigate('/dashboard')
+      navigate(redirectUrl)
     }
+  }
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    console.log('Google Success:', credentialResponse)
+    const result = await dispatch(googleLogin(credentialResponse.credential))
+    if (result.type === 'auth/googleLogin/fulfilled') {
+      navigate(redirectUrl)
+    }
+  }
+
+  const handleGoogleError = () => {
+    console.error('Google Failed')
+    toast.error('Google Sign In failed')
   }
 
   return (
@@ -175,6 +195,31 @@ const Login = () => {
               >
                 {loading ? 'Logging in...' : 'Sign in'}
               </Button>
+
+              {/* Google Login Divider */}
+              <div className="mt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-100"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500 font-medium">Or continue with</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-center w-full google-login-container">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
+                    useOneTap
+                    theme="outline"
+                    size="large"
+                    shape="pill"
+                    width="100%"
+                    text="continue_with"
+                  />
+                </div>
+              </div>
 
               <div className="text-center mt-6 pt-6 border-t border-gray-100">
                 <p className="text-gray-500 font-medium text-sm">

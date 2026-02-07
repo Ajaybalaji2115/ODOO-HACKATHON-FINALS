@@ -706,6 +706,73 @@ const Profile = () => {
                                             />
                                         </div>
 
+                                        {/* 🔥 GAMIFICATION & PROGRESS SECTION */}
+                                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl p-8 border border-blue-100 relative overflow-hidden">
+                                            <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
+
+                                                {/* CIRCLE CHART */}
+                                                <div className="flex-shrink-0">
+                                                    <div className="relative w-40 h-40">
+                                                        <svg className="w-full h-full transform -rotate-90">
+                                                            <circle
+                                                                cx="80"
+                                                                cy="80"
+                                                                r="70"
+                                                                stroke="currentColor"
+                                                                strokeWidth="10"
+                                                                fill="transparent"
+                                                                className="text-white/50"
+                                                            />
+                                                            <circle
+                                                                cx="80"
+                                                                cy="80"
+                                                                r="70"
+                                                                stroke="currentColor"
+                                                                strokeWidth="10"
+                                                                fill="transparent"
+                                                                strokeDasharray={2 * Math.PI * 70}
+                                                                strokeDashoffset={(2 * Math.PI * 70) - ((Math.min((formData.studentStats?.totalPoints || 0) / 200, 1) * 100) / 100) * (2 * Math.PI * 70)}
+                                                                strokeLinecap="round"
+                                                                className="text-blue-600 transition-all duration-1000 ease-out"
+                                                            />
+                                                        </svg>
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                            <span className="text-xs text-blue-600 font-bold uppercase tracking-wider">Points</span>
+                                                            <span className="text-3xl font-black text-gray-900">{formData.studentStats?.totalPoints || 0}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* LEVEL INFO */}
+                                                <div className="flex-1 text-center md:text-left">
+                                                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                                                        Level: <span className="text-blue-600">{formData.studentStats?.currentLevel || 'Beginner'}</span>
+                                                    </h3>
+                                                    <p className="text-gray-600 mb-4">
+                                                        Keep learning to unlock new badges and reach the next level!
+                                                        You are doing great.
+                                                    </p>
+
+                                                    {/* XP Bar */}
+                                                    <div className="w-full bg-white/50 rounded-full h-3 mb-2 border border-blue-100">
+                                                        <div
+                                                            className="bg-blue-500 h-full rounded-full transition-all duration-500 shadow-sm"
+                                                            style={{ width: `${Math.min(((formData.studentStats?.totalPoints || 0) % 100) / 100 * 100, 100)}%` }} // Example logic
+                                                        ></div>
+                                                    </div>
+                                                    <div className="flex justify-between text-xs font-semibold text-gray-500">
+                                                        <span>Current Progress</span>
+                                                        <span>Next Level</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* DECORATIVE ICON */}
+                                                <div className="hidden md:block opacity-10 transform rotate-12">
+                                                    <Award size={120} className="text-blue-600" />
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         {/* BADGES SECTION */}
                                         <div>
                                             <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center space-x-2">

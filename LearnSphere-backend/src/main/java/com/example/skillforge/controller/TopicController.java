@@ -38,6 +38,13 @@ public class TopicController {
         return ResponseEntity.ok(topic);
     }
 
+    // ✅ Update Topic
+    @PutMapping("/{topicId}")
+    public ResponseEntity<Topic> updateTopic(@PathVariable Long topicId, @RequestBody TopicRequest topicRequest) {
+        Topic updatedTopic = topicService.updateTopic(topicId, topicRequest);
+        return ResponseEntity.ok(updatedTopic);
+    }
+
     // ✅ Delete Topic by ID
     @DeleteMapping("/{topicId}")
     public ResponseEntity<String> deleteTopic(@PathVariable Long topicId) {

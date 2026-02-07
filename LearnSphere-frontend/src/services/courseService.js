@@ -74,6 +74,20 @@ export const courseService = {
     const params = studentId ? { studentId } : {};
     const response = await api.get(`/courses/${courseId}/recommendation`, { params });
     return response.data;
+  },
+
+  async uploadCourseImage(courseId, formData) {
+    const response = await api.post(`/courses/${courseId}/upload-image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+
+  async getPotentialCourseAdmins() {
+    const response = await api.get('/courses/potential-admins');
+    return response.data;
   }
 
 }

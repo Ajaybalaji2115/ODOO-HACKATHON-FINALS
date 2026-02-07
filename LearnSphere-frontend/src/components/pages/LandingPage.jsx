@@ -47,18 +47,33 @@ const LandingPage = () => {
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up [animation-delay:600ms]">
-                        <Link to="/register?role=STUDENT">
-                            <Button size="lg" className="h-14 px-8 text-base gap-2 shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 font-bold">
-                                Start Learning Now
-                                <ArrowRight size={18} />
-                            </Button>
-                        </Link>
-                        <Link to="/register?role=INSTRUCTOR">
-                            <div className="group flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-gray-100 rounded-xl hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer">
-                                <PlayCircle className="text-gray-400 group-hover:text-purple-600 transition-colors" size={20} />
-                                <span className="font-bold text-gray-700 group-hover:text-gray-900">Watch Demo</span>
+                        {isAuthenticated ? (
+                            <Link to="/dashboard">
+                                <Button size="lg" className="h-14 px-8 text-base gap-2 shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 font-bold">
+                                    Go to Dashboard
+                                    <ArrowRight size={18} />
+                                </Button>
+                            </Link>
+                        ) : (
+                            <Link to="/register?role=STUDENT">
+                                <Button size="lg" className="h-14 px-8 text-base gap-2 shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 font-bold">
+                                    Start Learning Now
+                                    <ArrowRight size={18} />
+                                </Button>
+                            </Link>
+                        )}
+                        <Link to="/courses">
+                            <div className="group flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-gray-100 rounded-xl hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer">
+                                <BookOpen className="text-gray-400 group-hover:text-blue-600 transition-colors" size={20} />
+                                <span className="font-bold text-gray-700 group-hover:text-gray-900">Browse Courses</span>
                             </div>
                         </Link>
+                        <a href="#features">
+                            <div className="group flex items-center gap-2 px-6 py-3.5 bg-white border-2 border-gray-100 rounded-xl hover:border-purple-500 hover:shadow-lg transition-all cursor-pointer">
+                                <PlayCircle className="text-gray-400 group-hover:text-purple-600 transition-colors" size={20} />
+                                <span className="font-bold text-gray-700 group-hover:text-gray-900">Explore Features</span>
+                            </div>
+                        </a>
                     </div>
 
                     <div className="mt-20 pt-12 pb-8 border-t border-slate-200 bg-white/50 backdrop-blur-sm rounded-3xl mx-4 sm:mx-0 animate-fade-in-up [animation-delay:800ms]">
@@ -181,11 +196,7 @@ const LandingPage = () => {
                                 Join as Student
                             </button>
                         </Link>
-                        <Link to="/register?role=INSTRUCTOR">
-                            <button className="min-w-[220px] px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white rounded-2xl font-bold text-xl transition-all shadow-lg hover:shadow-white/10 hover:-translate-y-1 border border-white/20">
-                                Become Instructor
-                            </button>
-                        </Link>
+
                     </div>
                 </div>
             </div>

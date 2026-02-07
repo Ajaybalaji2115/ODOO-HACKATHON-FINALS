@@ -77,6 +77,17 @@ public class AuthController {
     }
 
     /**
+     * Google Login
+     * POST /api/auth/google
+     */
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(
+            @Valid @RequestBody com.example.skillforge.dto.request.GoogleLoginRequest request) {
+        AuthResponse response = authService.googleLogin(request.getToken());
+        return ResponseEntity.ok(ApiResponse.success("Google login successful", response));
+    }
+
+    /**
      * Health check endpoint
      * GET /api/auth/health
      */

@@ -2,6 +2,8 @@ package com.example.skillforge.model.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.example.skillforge.model.enums.DifficultyLevel;
+import com.example.skillforge.model.enums.CourseVisibility;
+import com.example.skillforge.model.enums.AccessRule;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -60,6 +62,17 @@ public class Course {
     private Integer viewsCount = 0;
 
     private Long courseAdminUserId; // Responsible/Course Admin
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private CourseVisibility visibility = CourseVisibility.EVERYONE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private AccessRule accessRule = AccessRule.OPEN;
+
+    @Column
+    private Double price; // Only used when accessRule = ON_PAYMENT
 
     // ONE-TO-MANY with Topics
     @OneToMany(mappedBy = "course", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)

@@ -63,22 +63,33 @@ public class Quiz {
     @Column(nullable = false)
     private Integer totalAttempts = 0;
 
+    // --- REWARDS CONFIGURATION (Gamification) ---
+    @Column(nullable = false)
+    private Integer rewardFirstTry = 10;
+
+    @Column(nullable = false)
+    private Integer rewardSecondTry = 7;
+
+    @Column(nullable = false)
+    private Integer rewardThirdTry = 5;
+
+    @Column(nullable = false)
+    private Integer rewardFourthPlus = 2;
+
     // ONE-TO-MANY with Questions
     @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonIgnore
     private List<Question> questions = new ArrayList<>();
 
     // ONE-TO-MANY with QuizAttempts
-    @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL,  orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
     private List<QuizAttempt> attempts = new ArrayList<>();
-
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
-    
 
     @PrePersist
     protected void onCreate() {

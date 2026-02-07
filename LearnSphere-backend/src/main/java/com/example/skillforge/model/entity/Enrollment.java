@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "enrollments", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"student_id", "course_id"})
+        @UniqueConstraint(columnNames = { "student_id", "course_id" })
 })
 @Data
 @NoArgsConstructor
@@ -44,6 +44,13 @@ public class Enrollment {
     private LocalDateTime enrolledAt;
 
     private LocalDateTime lastAccessedAt;
+
+    private String transactionId;
+
+    private Double amountPaid;
+
+    @Enumerated(EnumType.STRING)
+    private com.example.skillforge.model.enums.PaymentStatus paymentStatus;
 
     @PrePersist
     protected void onCreate() {

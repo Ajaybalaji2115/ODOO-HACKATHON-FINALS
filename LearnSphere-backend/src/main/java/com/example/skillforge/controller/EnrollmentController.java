@@ -119,7 +119,6 @@
 //    }
 //}
 
-
 package com.example.skillforge.controller;
 
 import com.example.skillforge.dto.response.EnrollmentResponse;
@@ -128,7 +127,10 @@ import com.example.skillforge.service.EnrollmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/enrollments")
@@ -141,8 +143,7 @@ public class EnrollmentController {
     @PostMapping
     public ResponseEntity<Enrollment> enrollCourse(
             @RequestParam Long studentId,
-            @RequestParam Long courseId
-    ) {
+            @RequestParam Long courseId) {
         try {
             Enrollment enrollment = enrollmentService.enrollStudent(studentId, courseId);
             return ResponseEntity.ok(enrollment);
@@ -153,16 +154,14 @@ public class EnrollmentController {
 
     @GetMapping("/student/{studentId}")
     public ResponseEntity<List<EnrollmentResponse>> getStudentEnrollments(
-            @PathVariable Long studentId
-    ) {
+            @PathVariable Long studentId) {
         return ResponseEntity.ok(enrollmentService.getStudentEnrollments(studentId));
     }
 
     @GetMapping
     public ResponseEntity<EnrollmentResponse> getEnrollment(
             @RequestParam Long studentId,
-            @RequestParam Long courseId
-    ) {
+            @RequestParam Long courseId) {
         return ResponseEntity.ok(enrollmentService.getEnrollment(studentId, courseId));
     }
 
@@ -170,18 +169,15 @@ public class EnrollmentController {
     public ResponseEntity<EnrollmentResponse> updateProgress(
             @RequestParam Long studentId,
             @RequestParam Long courseId,
-            @RequestParam Integer completionPercentage
-    ) {
+            @RequestParam Integer completionPercentage) {
         return ResponseEntity.ok(
-                enrollmentService.updateProgress(studentId, courseId, completionPercentage)
-        );
+                enrollmentService.updateProgress(studentId, courseId, completionPercentage));
     }
 
     @DeleteMapping
     public ResponseEntity<String> unenrollCourse(
             @RequestParam Long studentId,
-            @RequestParam Long courseId
-    ) {
+            @RequestParam Long courseId) {
         try {
             enrollmentService.unenrollStudent(studentId, courseId);
             return ResponseEntity.ok("Unenrolled successfully");
@@ -193,15 +189,66 @@ public class EnrollmentController {
     @GetMapping("/check")
     public ResponseEntity<Boolean> checkEnrollment(
             @RequestParam Long studentId,
-            @RequestParam Long courseId
-    ) {
+            @RequestParam Long courseId) {
         return ResponseEntity.ok(enrollmentService.isEnrolled(studentId, courseId));
     }
 
     @GetMapping("/course/{courseId}")
     public ResponseEntity<List<EnrollmentResponse>> getCourseEnrollments(
-            @PathVariable Long courseId
-    ) {
+            @PathVariable Long courseId) {
         return ResponseEntity.ok(enrollmentService.getCourseEnrollments(courseId));
+    }
+
+    /**
+     * Bulk enroll students by email
+     */
+    @PostMapping("/course/{courseId}/bulk-enroll")
+    public ResponseEntity<Map<String, Object>> bulkEnrollStudents(
+            @PathVariable Long courseId,
+            @RequestBody List<String> emails) {
+        try {
+            Map<String, Object> result = enrollmentService.bulkEnrollByEmail(courseId, emails);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    /**
+     * Contact all enrolled students
+     */
+    @PostMapping("/course/{courseId}/contact-attendees")
+    public ResponseEntity<Map<String, Object>> contactCourseAttendees(
+            @PathVariable Long courseId,
+            @RequestBody Map<String, String> emailData) {
+        try {
+            String subject = emailData.get("subject");
+            String message = emailData.get("message");
+
+            if (subject == null || subject.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("message", "Subject is required");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            if (message == null || message.trim().isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("success", false);
+                error.put("message", "Message is required");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            Map<String, Object> result = enrollmentService.contactCourseAttendees(courseId, subject, message);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
     }
 }

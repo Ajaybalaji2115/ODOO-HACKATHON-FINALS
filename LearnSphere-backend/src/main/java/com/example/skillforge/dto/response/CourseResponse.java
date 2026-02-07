@@ -1,6 +1,8 @@
 package com.example.skillforge.dto.response;
 
 import com.example.skillforge.model.enums.DifficultyLevel;
+import com.example.skillforge.model.enums.CourseVisibility;
+import com.example.skillforge.model.enums.AccessRule;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -34,4 +36,10 @@ public class CourseResponse {
     // ⭐ NEW ⭐ (Needed for sorting dashboard courses)
     private LocalDateTime lastAccessed;
 
+    // Course Options (Access Rules)
+    private CourseVisibility visibility;
+    private AccessRule accessRule;
+    private Double price;
+
+    private String category; // Added missing category field
 }

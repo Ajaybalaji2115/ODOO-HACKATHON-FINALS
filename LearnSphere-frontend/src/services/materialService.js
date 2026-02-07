@@ -5,7 +5,7 @@ export const materialService = {
     try {
       const response = await api.post('/materials/upload', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': undefined
         },
         timeout: 600000, // 10 minutes timeout for large files
         onUploadProgress: (progressEvent) => {
@@ -32,6 +32,9 @@ export const materialService = {
     formData.append('title', materialData.title)
     formData.append('description', materialData.description || '')
     formData.append('link', materialData.link)
+    if (materialData.responsible) formData.append('responsible', materialData.responsible)
+    if (materialData.durationMinutes) formData.append('durationMinutes', materialData.durationMinutes)
+    if (materialData.allowDownload !== undefined) formData.append('allowDownload', materialData.allowDownload)
 
     const response = await api.post('/materials/link', formData, {
       headers: {
@@ -51,6 +54,16 @@ export const materialService = {
     return response.data
   },
 
+  async updateMaterial(id, formData) {
+    // formData can be Multipart (file+data) or just data
+    const response = await api.put(`/materials/${id}`, formData, {
+      headers: {
+        'Content-Type': undefined
+      }
+    })
+    return response.data
+  },
+
   async enrollCourse(studentId, courseId) {
     const response = await api.post(`/enrollments?studentId=${studentId}&courseId=${courseId}`)
     return response.data
@@ -63,6 +76,20 @@ export const materialService = {
 
   async unenrollCourse(studentId, courseId) {
     const response = await api.delete(`/enrollments?studentId=${studentId}&courseId=${courseId}`)
+    return response.data
+  },
+
+  async addAttachment(materialId, formData) {
+    const response = await api.post(`/materials/${materialId}/attachments`, formData, {
+      headers: {
+        'Content-Type': undefined
+      }
+    })
+    return response.data
+  },
+
+  async deleteAttachment(attachmentId) {
+    const response = await api.delete(`/materials/attachments/${attachmentId}`)
     return response.data
   }
 }

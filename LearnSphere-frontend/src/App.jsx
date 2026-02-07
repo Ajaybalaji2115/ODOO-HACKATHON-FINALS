@@ -142,20 +142,12 @@ function App() {
 
           <Route
             path="/courses"
-            element={
-              <PrivateRoute>
-                <CourseList />
-              </PrivateRoute>
-            }
+            element={<CourseList />}
           />
 
           <Route
             path="/courses/:id"
-            element={
-              <PrivateRoute>
-                <CourseDetail />
-              </PrivateRoute>
-            }
+            element={<CourseDetail />}
           />
 
           <Route

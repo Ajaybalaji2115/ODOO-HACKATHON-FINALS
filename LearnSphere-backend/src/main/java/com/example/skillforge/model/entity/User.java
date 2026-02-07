@@ -52,10 +52,14 @@ public class User {
     // ONE-TO-ONE MAPPINGS
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
     private Student student;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
     private Instructor instructor;
 
     @Column(nullable = false, updatable = false)

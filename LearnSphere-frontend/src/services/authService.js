@@ -19,6 +19,19 @@ export const authService = {
   },
 
   /**
+   * Google Login
+   */
+  async googleLogin(token) {
+    const response = await api.post('/auth/google', { token })
+    if (response.data?.data) {
+      const { token, refreshToken } = response.data.data
+      if (token) localStorage.setItem('token', token)
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+    }
+    return response.data
+  },
+
+  /**
    * Register new user and store tokens
    */
   async register(userData) {

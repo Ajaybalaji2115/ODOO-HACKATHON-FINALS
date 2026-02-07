@@ -55,12 +55,17 @@ public class SecurityConfig {
                                 "/error")
                         .permitAll() // ALL UNPROTECTED ENDPOINTS HERE
 
+                        // Allow public access to view courses (GET only)
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/courses", "/api/courses/**")
+                        .permitAll()
+
                         .requestMatchers("/api/materials/view-pdf/**").permitAll() // ✅ Allow PDF viewing
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/materials/link").hasAnyAuthority("ROLE_INSTRUCTOR", "ROLE_ADMIN")
                         .requestMatchers("/api/instructor/**").hasAuthority("ROLE_INSTRUCTOR")
-                        .requestMatchers("/api/quizzes/**").hasAnyAuthority("ROLE_STUDENT", "ROLE_INSTRUCTOR", "ROLE_ADMIN")
-                        
+                        .requestMatchers("/api/quizzes/**")
+                        .hasAnyAuthority("ROLE_STUDENT", "ROLE_INSTRUCTOR", "ROLE_ADMIN")
+
                         // Analytics
                         .requestMatchers("/api/analytics/student").hasAuthority("ROLE_STUDENT")
                         .requestMatchers("/api/analytics/instructor").hasAuthority("ROLE_INSTRUCTOR")

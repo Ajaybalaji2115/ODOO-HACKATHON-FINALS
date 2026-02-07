@@ -383,18 +383,15 @@ public class CertificateService {
         private String verificationBaseUrl;
 
         @Transactional
-        public Certificate generateCertificate(Long userId, Long courseId) {
-                // 1. Resolve User/Student
-                // The parameter passed is actually the User ID (from JWT/Frontend) not the
-                // Student ID (PK)
-                // So we look up the student by USER ID.
-                Student studentEntity = studentRepository.findByUserId(userId)
+        public Certificate generateCertificate(Long studentId, Long courseId) {
+                // 1. Resolve Student directly by ID (since Controller passes studentId)
+                Student studentEntity = studentRepository.findById(studentId)
                                 .orElseThrow(() -> new RuntimeException(
-                                                "Student entity not found for User ID: " + userId));
+                                                "Student entity not found for Student ID: " + studentId));
                 User user = studentEntity.getUser();
 
                 // 2. Validate Completion via Enrollment (Source of Truth)
-                Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(studentEntity.getId(), courseId)
+                Enrollment enrollment = enrollmentRepository.findByStudentIdAndCourseId(studentId, courseId)
                                 .orElseThrow(() -> new RuntimeException("Enrollment not found"));
 
                 if (!Boolean.TRUE.equals(enrollment.getIsCompleted())) {
@@ -463,7 +460,7 @@ public class CertificateService {
 
                 float cx = 421;
 
-                ColumnText.showTextAligned(canvas, Element.ALIGN_CENTER, new Phrase("LearnSphere-Platform", header), cx,
+                ColumnText.showTextAligned(canvas, Element.ALIGN_CENTER, new Phrase("LearnSphere", header), cx,
                                 500, 0);
                 ColumnText.showTextAligned(canvas, Element.ALIGN_CENTER,
                                 new Phrase("COURSE COMPLETION CERTIFICATE", title), cx, 440, 0);
@@ -481,7 +478,8 @@ public class CertificateService {
                                 new Phrase("on " + dateStr, text), cx, 220, 0);
 
                 ColumnText.showTextAligned(canvas, Element.ALIGN_CENTER,
-                                new Phrase("LearnSphere-Platform Learning Platform",
+                                new Phrase("LearnSphere : Access the Knowledge Nexus\n" + //
+                                                                                "",
                                                 FontFactory.getFont(FontFactory.HELVETICA_BOLD, 22, blue)),
                                 cx, 180, 0);
 
@@ -591,7 +589,7 @@ public class CertificateService {
                 ColumnText.showTextAligned(
                                 canvas,
                                 Element.ALIGN_CENTER,
-                                new Phrase("Gowtham B", signNameFont),
+                                new Phrase("Mantavya Gajjar", signNameFont),
                                 sigCenterX,
                                 sigBaseY,
                                 0);
@@ -609,7 +607,7 @@ public class CertificateService {
                 ColumnText.showTextAligned(
                                 canvas,
                                 Element.ALIGN_CENTER,
-                                new Phrase("LearnSphere-Platform Learning Platform", small),
+                                new Phrase("LearnSphere Learning Platform", small),
                                 sigCenterX,
                                 sigBaseY - 34,
                                 0);

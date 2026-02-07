@@ -32,13 +32,13 @@ public class StudentController {
         data.put("message", "Welcome to Student Dashboard");
         data.put("user", authentication.getName());
         data.put("role", "STUDENT");
-        data.put("features", new String[]{
-            "View Enrolled Courses",
-            "Track Learning Progress",
-            "Take Quizzes",
-            "View Adaptive Learning Path"
+        data.put("features", new String[] {
+                "View Enrolled Courses",
+                "Track Learning Progress",
+                "Take Quizzes",
+                "View Adaptive Learning Path"
         });
-        
+
         return ResponseEntity.ok(ApiResponse.success("Student dashboard data", data));
     }
 
@@ -51,7 +51,7 @@ public class StudentController {
         Map<String, Object> data = new HashMap<>();
         data.put("message", "Student Profile");
         data.put("user", authentication.getName());
-        
+
         return ResponseEntity.ok(ApiResponse.success("Student profile data", data));
     }
 
@@ -77,7 +77,28 @@ public class StudentController {
         data.put("averageScore", student.getAverageScore());
         data.put("currentStreak", streak);
         data.put("totalPoints", student.getTotalPoints());
-        
+
         return ResponseEntity.ok(ApiResponse.success("Student statistics", data));
+    }
+
+    /**
+     * Get all students (for instructor to select attendees)
+     */
+    @GetMapping("/list")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
+    public ResponseEntity<ApiResponse<java.util.List<Map<String, Object>>>> getAllStudents() {
+        java.util.List<Map<String, Object>> students = studentRepository.findAll().stream()
+                .map(student -> {
+                    Map<String, Object> studentInfo = new HashMap<>();
+                    studentInfo.put("id", student.getId());
+                    studentInfo.put("userId", student.getUser().getId());
+                    studentInfo.put("name", student.getUser().getName());
+                    studentInfo.put("email", student.getUser().getEmail());
+                    studentInfo.put("coursesEnrolled", student.getCoursesEnrolled());
+                    return studentInfo;
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success("All students", students));
     }
 }

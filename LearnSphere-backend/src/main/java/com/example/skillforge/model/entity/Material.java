@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "materials")
@@ -51,6 +53,14 @@ public class Material {
     private DifficultyLevel difficultyLevel;
 
     private Integer durationMinutes;
+
+    private String responsible;
+
+    @Column(nullable = false)
+    private Boolean allowDownload = false; // Default false
+
+    @OneToMany(mappedBy = "material", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<MaterialAttachment> attachments = new ArrayList<>();
 
     @Column(nullable = false)
     private Integer orderIndex = 0;

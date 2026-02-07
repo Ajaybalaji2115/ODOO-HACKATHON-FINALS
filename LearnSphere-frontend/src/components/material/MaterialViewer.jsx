@@ -317,7 +317,7 @@
 //               >
 //                 Mark Completed
 //               </Button> */}
-              
+
 //               {(material.materialType === 'VIDEO' || material.materialType === 'PDF') && (
 //                 <Button
 //                   onClick={handleDownload}
@@ -803,7 +803,14 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
 
   if (!material) return null;
 
-  const getFileUrl = () => material.filePath;
+  const getFileUrl = () => {
+    // For materials with attachments (like IMAGE), use the first attachment's fileUrl
+    if (material.attachments && material.attachments.length > 0) {
+      return material.attachments[0].fileUrl || material.attachments[0].externalUrl;
+    }
+    // For materials with direct file path (like VIDEO, PDF)
+    return material.filePath || material.externalUrl;
+  };
 
   const getPdfViewUrl = () => {
     const original = getFileUrl();
@@ -978,22 +985,20 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
                 <div className="space-x-2">
                   <button
                     onClick={() => setPdfViewMode("google")}
-                    className={`px-3 py-1 text-sm rounded ${
-                      pdfViewMode === "google"
-                        ? "bg-blue-600 text-white"
-                        : "border border-blue-300"
-                    }`}
+                    className={`px-3 py-1 text-sm rounded ${pdfViewMode === "google"
+                      ? "bg-blue-600 text-white"
+                      : "border border-blue-300"
+                      }`}
                   >
                     Google
                   </button>
 
                   <button
                     onClick={() => setPdfViewMode("mozilla")}
-                    className={`px-3 py-1 text-sm rounded ${
-                      pdfViewMode === "mozilla"
-                        ? "bg-blue-600 text-white"
-                        : "border border-blue-300"
-                    }`}
+                    className={`px-3 py-1 text-sm rounded ${pdfViewMode === "mozilla"
+                      ? "bg-blue-600 text-white"
+                      : "border border-blue-300"
+                      }`}
                   >
                     Mozilla
                   </button>
@@ -1012,7 +1017,7 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
           {material.materialType === "LINK" && (
             <div className="p-6">
               <a
-                href={material.link}
+                href={getFileUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-blue-600 text-white px-4 py-2 rounded flex items-center space-x-2"
@@ -1022,10 +1027,34 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
               </a>
 
               <iframe
-                src={material.link}
+                src={getFileUrl()}
                 className="w-full h-[70vh] mt-4 border"
                 title="External Link"
               />
+            </div>
+          )}
+
+          {/* IMAGE VIEWER */}
+          {material.materialType === "IMAGE" && (
+            <div className="p-6 bg-gray-50 flex items-center justify-center">
+              <div className="max-w-full max-h-[70vh] overflow-auto">
+                <img
+                  src={getFileUrl()}
+                  alt={material.title}
+                  className="max-w-full h-auto rounded-lg shadow-lg"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* TEXT VIEWER */}
+          {material.materialType === "TEXT" && (
+            <div className="p-6 bg-gray-50">
+              <div className="prose max-w-none bg-white p-6 rounded-lg shadow-sm">
+                <pre className="whitespace-pre-wrap font-sans text-gray-800">
+                  {material.content || material.description || "No content available"}
+                </pre>
+              </div>
             </div>
           )}
 
@@ -1039,11 +1068,12 @@ const MaterialViewer = ({ material, topicId, onClose }) => {
 
           <div className="flex space-x-3">
             {(material.materialType === "VIDEO" ||
-              material.materialType === "PDF") && (
-              <Button onClick={handleDownload} size="sm" variant="secondary">
-                Download
-              </Button>
-            )}
+              material.materialType === "PDF" ||
+              material.materialType === "IMAGE") && (
+                <Button onClick={handleDownload} size="sm" variant="secondary">
+                  Download
+                </Button>
+              )}
 
             <Button
               onClick={() => {

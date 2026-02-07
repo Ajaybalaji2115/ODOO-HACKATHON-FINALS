@@ -961,6 +961,8 @@ import {
   Eye,
   Tag,
   Columns3,
+  IndianRupee,
+  Lock,
 } from "lucide-react";
 
 import Card from "../common/Card";
@@ -979,7 +981,7 @@ import KanbanView from "./KanbanView";
 
 const CourseList = () => {
   const navigate = useNavigate();
-  const { user } = useSelector((state) => state.auth);
+  const { user, isAuthenticated } = useSelector((state) => state.auth);
   const globalLoading = useSelector((state) => state.course?.loading);
 
   const isInstructor = user?.role === "INSTRUCTOR";
@@ -1174,6 +1176,20 @@ const CourseList = () => {
     }).catch(() => {
       toast.error('Failed to copy link');
     });
+  };
+
+  // Handle enroll click - redirect to login if not authenticated
+  const handleEnrollClick = (e, courseId) => {
+    e.stopPropagation();
+
+    if (!isAuthenticated) {
+      toast.error('Please log in to enroll in this course');
+      navigate(`/login?redirect=/courses/${courseId}`);
+      return;
+    }
+
+    // If authenticated, navigate to course detail page
+    navigate(`/courses/${courseId}`, { state: { from: 'courses' } });
   };
 
   // Parse tags from comma-separated string
@@ -1522,6 +1538,17 @@ const CourseList = () => {
                             course.difficultyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                             }`}>{course.difficultyLevel}</span>
 
+                          {/* Price Badge */}
+                          <div className="ml-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${course.accessRule === 'ON_PAYMENT' ? 'bg-yellow-100 text-yellow-800' :
+                              course.accessRule === 'ON_INVITATION' ? 'bg-purple-100 text-purple-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                              {course.accessRule === 'ON_PAYMENT' ? `₹${course.price?.toFixed(2)}` :
+                                course.accessRule === 'ON_INVITATION' ? 'Invite Only' : 'Free'}
+                            </span>
+                          </div>
+
                           {isInstructor && (
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${course.isPublished ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                               {course.isPublished ? 'Published' : 'Draft'}
@@ -1585,8 +1612,16 @@ const CourseList = () => {
                             <>
                               <Button onClick={(e) => handleShare(e, course)} size="sm" variant="secondary" icon={Share2} title="Share course"></Button>
                               <Button onClick={(e) => { e.stopPropagation(); navigate(`/courses/${course.id}`, { state: { from: 'courses' } }); }} size="sm" variant="secondary">View Details</Button>
-                              {!course.isEnrolled && (
-                                <Button onClick={(e) => { e.stopPropagation(); navigate(`/courses/${course.id}`, { state: { from: 'courses' } }); }} variant="primary" size="sm">Enroll Now</Button>
+                              {!course.isEnrolled && (user?.role === 'STUDENT' || !isAuthenticated) && (
+                                <Button
+                                  onClick={(e) => handleEnrollClick(e, course.id)}
+                                  variant={course.accessRule === 'ON_PAYMENT' ? "warning" : "primary"}
+                                  size="sm"
+                                  icon={course.accessRule === 'ON_INVITATION' ? Lock : (course.accessRule === 'ON_PAYMENT' ? IndianRupee : null)}
+                                >
+                                  {course.accessRule === 'ON_PAYMENT' ? `₹${course.price?.toFixed(2)}` :
+                                    course.accessRule === 'ON_INVITATION' ? 'Request' : 'Enroll'}
+                                </Button>
                               )}
                             </>
                           )}
@@ -1720,8 +1755,8 @@ const CourseList = () => {
                           <Button onClick={(e) => handleShare(e, course)} size="sm" variant="secondary" icon={Share2} title="Share course"></Button>
                           <Button onClick={(e) => { e.stopPropagation(); navigate(`/courses/${course.id}`, { state: { from: 'courses' } }); }} size="sm" variant="secondary">View Details</Button>
 
-                          {!course.isEnrolled && (
-                            <Button onClick={(e) => { e.stopPropagation(); navigate(`/courses/${course.id}`, { state: { from: 'courses' } }); }} variant="primary" size="sm">Enroll Now</Button>
+                          {!course.isEnrolled && (user?.role === 'STUDENT' || !isAuthenticated) && (
+                            <Button onClick={(e) => handleEnrollClick(e, course.id)} variant="primary" size="sm">Enroll Now</Button>
                           )}
                         </div>
                       )}

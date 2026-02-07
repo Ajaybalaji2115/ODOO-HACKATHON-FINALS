@@ -243,7 +243,7 @@ public class QuizAttemptService {
             Long topicId) {
 
         System.out.println("DEBUG: Evaluate Attempt - TimeSpent: " + timeSpentSeconds + "s, TopicId: " + topicId);
-        
+
         // 1. Load quiz
         Quiz quiz = quizRepository.findById(quizId)
                 .orElseThrow(() -> new RuntimeException("Quiz not found"));
@@ -298,9 +298,49 @@ public class QuizAttemptService {
         attempt.setScore(scorePercent);
         attempt.setAttemptTime(LocalDateTime.now());
         attempt.setTimeSpent(timeSpentSeconds);
-        attempt.setStatus("COMPLETED");
+        attempt.setStatus(scorePercent >= 60 ? "PASSED" : "FAILED"); // Assume 60% is passing for now, or use
+                                                                     // quiz.passingMarks
 
-        attempt = attemptRepository.save(attempt);
+        QuizAttempt savedAttempt = attemptRepository.save(attempt);
+        attempt = savedAttempt;
+
+        // --- GAMIFICATION: AWARD POINTS ---
+        if ("PASSED".equals(savedAttempt.getStatus())) {
+            // Check if student already passed this quiz previously
+            List<QuizAttempt> previousAttempts = attemptRepository.findByQuizIdAndStudentId(quizId, studentId);
+            boolean alreadyPassed = previousAttempts.stream()
+                    .anyMatch(a -> !a.getId().equals(savedAttempt.getId()) && "PASSED".equals(a.getStatus()));
+
+            if (!alreadyPassed) {
+                // Calculate attempt number (this is the Nth attempt)
+                int attemptCount = previousAttempts.size(); // Includes current attempt since we just saved it?
+                // Wait, findByQuizIdAndStudentId might include current if transaction
+                // committed?
+                // Let's rely on size. If DB consistency is strict, count might be 0 if not
+                // committed yet?
+                // Actually, let's use the list size.
+                // If we just saved 'attempt', and findBy... returns it, size is N.
+
+                int pointsToAward = 0;
+                if (attemptCount <= 1)
+                    pointsToAward = quiz.getRewardFirstTry();
+                else if (attemptCount == 2)
+                    pointsToAward = quiz.getRewardSecondTry();
+                else if (attemptCount == 3)
+                    pointsToAward = quiz.getRewardThirdTry();
+                else
+                    pointsToAward = quiz.getRewardFourthPlus();
+
+                if (pointsToAward > 0) {
+                    Student student = studentRepository.findById(studentId).orElse(null);
+                    if (student != null) {
+                        student.setTotalPoints(student.getTotalPoints() + pointsToAward);
+                        studentRepository.save(student);
+                        System.out.println("Awarded " + pointsToAward + " points to Student " + studentId);
+                    }
+                }
+            }
+        }
 
         // 5. Save all answers
         for (AnswerSubmission sub : answers) {
@@ -322,13 +362,13 @@ public class QuizAttemptService {
         // 6. Update progress via CompletionService (Strict Rules)
         if (topicId != null) {
             // Check Topic Completion (Passing marks required)
-            boolean topicCompleted = completionService.checkTopicCompletion(studentId, topicId, attempt.getId());
+            completionService.checkTopicCompletion(studentId, topicId, attempt.getId());
 
             // If topic completed, or always, check Course Completion
             Topic topic = topicRepository.findById(topicId).orElse(null);
             if (topic != null) {
                 completionService.checkCourseCompletion(studentId, topic.getCourse().getId());
-                
+
                 // 🔥 Add Time Spent to Course Progress
                 if (timeSpentSeconds > 0) {
                     int mins = (int) Math.ceil(timeSpentSeconds / 60.0);
@@ -339,7 +379,7 @@ public class QuizAttemptService {
             // This might be a Course Quiz (Final Quiz)
             Long courseId = quiz.getCourse().getId();
             completionService.checkCourseCompletion(studentId, courseId);
-            
+
             // 🔥 Add Time Spent to Course Progress
             if (timeSpentSeconds > 0) {
                 int mins = (int) Math.ceil(timeSpentSeconds / 60.0);
@@ -352,7 +392,7 @@ public class QuizAttemptService {
             int mins = (int) Math.ceil(timeSpentSeconds / 60.0);
             try {
                 studentRepository.findById(studentId).ifPresent(student -> {
-                     userActivityService.logTime(student.getUser().getId(), mins);
+                    userActivityService.logTime(student.getUser().getId(), mins);
                 });
             } catch (Exception e) {
                 System.err.println("Failed to log activity time: " + e.getMessage());

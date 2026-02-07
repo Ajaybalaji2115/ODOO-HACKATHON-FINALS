@@ -89,9 +89,10 @@ public class CourseController {
 
     @PatchMapping("/{id}/publish")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    public ResponseEntity<ApiResponse<Void>> publishCourse(@PathVariable Long id) {
-        courseService.publishCourse(id);
-        return ResponseEntity.ok(ApiResponse.success("Course published successfully", null));
+    public ResponseEntity<ApiResponse<Boolean>> publishCourse(@PathVariable Long id) {
+        boolean isPublished = courseService.togglePublish(id);
+        String message = isPublished ? "Course published successfully" : "Course unpublished successfully";
+        return ResponseEntity.ok(ApiResponse.success(message, isPublished));
     }
 
     @DeleteMapping("/{id}")
@@ -117,17 +118,42 @@ public class CourseController {
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file) {
         try {
-            // TODO: Implement S3 upload logic
-            // For now, return a placeholder URL
-            String imageUrl = "https://placeholder-url.com/" + file.getOriginalFilename();
+            // Validate file
+            if (file.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Please select a file to upload");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            // Validate file type
+            String contentType = file.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Only image files are allowed");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            // Validate file size (max 5MB)
+            if (file.getSize() > 5 * 1024 * 1024) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "File size must be less than 5MB");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            // Upload to S3 and get URL
+            String imageUrl = courseService.uploadCourseImage(id, file);
 
             Map<String, String> response = new HashMap<>();
             response.put("url", imageUrl);
-            response.put("message", "Image upload endpoint ready - S3 integration pending");
+            response.put("message", "Image uploaded successfully");
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            e.printStackTrace(); // Log full stack trace
+            System.err.println("Error uploading image: " + e.getMessage());
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage() != null ? e.getMessage() : "Unknown error occurred");
+            return ResponseEntity.badRequest().body(error);
         }
     }
 
@@ -156,6 +182,13 @@ public class CourseController {
         // Map to response (simplified mapping here, ideally use mapper)
         CourseResponse response = mapToResponse(nextCourse);
         return ResponseEntity.ok(ApiResponse.success("Next course recommendation", response));
+    }
+
+    @GetMapping("/potential-admins")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
+    public ResponseEntity<ApiResponse<java.util.List<java.util.Map<String, Object>>>> getPotentialCourseAdmins() {
+        return ResponseEntity
+                .ok(ApiResponse.success("Potential admins retrieved", courseService.getPotentialCourseAdmins()));
     }
 
     @GetMapping("/recommendations")

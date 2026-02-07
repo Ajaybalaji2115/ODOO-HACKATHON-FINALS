@@ -8,6 +8,7 @@ import com.example.skillforge.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -175,5 +176,17 @@ public class UserService {
                 .blockReason(user.getBlockReason())
                 .blockExpiry(user.getBlockExpiry())
                 .build();
+    }
+
+    public List<Map<String, Object>> getAdminUsers() {
+        return userRepository.findByRole(com.example.skillforge.model.enums.Role.ADMIN).stream()
+                .map(user -> {
+                    Map<String, Object> adminData = new java.util.HashMap<>();
+                    adminData.put("userId", user.getId());
+                    adminData.put("name", user.getName());
+                    adminData.put("email", user.getEmail());
+                    return adminData;
+                })
+                .collect(Collectors.toList());
     }
 }

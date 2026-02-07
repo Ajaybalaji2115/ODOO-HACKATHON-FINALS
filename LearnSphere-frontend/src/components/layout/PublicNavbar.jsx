@@ -42,14 +42,9 @@ const PublicNavbar = () => {
                                 <Link to="/login" className="text-sm font-bold text-gray-600 hover:text-blue-600 transition-colors px-3">
                                     Login
                                 </Link>
-                                <Link to="/register?role=STUDENT">
-                                    <Button variant="outline" size="sm" className="h-9 border-indigo-200 hover:border-blue-500 hover:bg-white font-bold text-xs bg-white/50">
-                                        Join as Student
-                                    </Button>
-                                </Link>
-                                <Link to="/register?role=INSTRUCTOR">
+                                <Link to="/register">
                                     <Button variant="primary" size="sm" className="h-9 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 font-bold text-xs">
-                                        Become Instructor
+                                        Sign Up
                                     </Button>
                                 </Link>
                             </div>

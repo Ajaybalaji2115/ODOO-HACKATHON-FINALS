@@ -84,8 +84,8 @@ const KanbanView = ({
             <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${course.difficultyLevel === 'BEGINNER' ? 'bg-green-100 text-green-800' :
-                            course.difficultyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
+                        course.difficultyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
                         }`}>
                         {course.difficultyLevel}
                     </span>
@@ -201,20 +201,32 @@ const KanbanView = ({
 
     return (
         <div className="flex gap-4 overflow-x-auto pb-4">
-            <Column
-                title="Draft"
-                courses={draftCourses}
-                status="draft"
-                count={draftCourses.length}
-                bgColor="bg-yellow-100"
-            />
-            <Column
-                title="Published"
-                courses={publishedCourses}
-                status="published"
-                count={publishedCourses.length}
-                bgColor="bg-green-100"
-            />
+            {isInstructor ? (
+                <>
+                    <Column
+                        title="Draft"
+                        courses={draftCourses}
+                        status="draft"
+                        count={draftCourses.length}
+                        bgColor="bg-yellow-100"
+                    />
+                    <Column
+                        title="Published"
+                        courses={publishedCourses}
+                        status="published"
+                        count={publishedCourses.length}
+                        bgColor="bg-green-100"
+                    />
+                </>
+            ) : (
+                <Column
+                    title="All Courses"
+                    courses={courses}
+                    status="all"
+                    count={courses.length}
+                    bgColor="bg-blue-100"
+                />
+            )}
         </div>
     );
 };

@@ -23,6 +23,12 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import java.io.IOException;
 
 /**
  * \n * Service handling authentication operations: login, register, and token
@@ -45,6 +51,18 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        // Force role to STUDENT for public registration
+        request.setRole(Role.STUDENT);
+        return createNewUser(request);
+    }
+
+    @Transactional
+    public AuthResponse createUser(RegisterRequest request) {
+        // Allow any role (Admin/Instructor/Student) - controlled by Controller
+        return createNewUser(request);
+    }
+
+    private AuthResponse createNewUser(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already exists");
         }
@@ -74,6 +92,10 @@ public class AuthService {
         // Save user (cascade will save Student/Instructor)
         user = userRepository.save(user);
 
+        // Generate tokens (optional for admin creation, but good for response)
+        // If Admin creates user, maybe return user details without token?
+        // But reusing AuthResponse is fine.
+
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String accessToken = jwtService.generateToken(userDetails);
         String refreshToken = jwtService.generateRefreshToken(userDetails);
@@ -87,13 +109,13 @@ public class AuthService {
             }
         }
 
-        log.info("User registered successfully: {}", user.getEmail());
+        log.info("User registered/created successfully: {} with role {}", user.getEmail(), user.getRole());
 
         return AuthResponse.builder()
                 .token(accessToken)
                 .refreshToken(refreshToken)
                 .userId(user.getId())
-                .studentId(studentId) // return studentId
+                .studentId(studentId)
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole())
@@ -149,6 +171,86 @@ public class AuthService {
         } catch (Exception e) {
             log.error("Login error: {}", e.getMessage(), e);
             throw e;
+        }
+    }
+
+    @Transactional
+    public AuthResponse googleLogin(String idToken) {
+        try {
+            // Verify token with Google
+            OkHttpClient client = new OkHttpClient();
+            String url = "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken;
+
+            Request request = new Request.Builder()
+                    .url(url)
+                    .build();
+
+            okhttp3.Response response = client.newCall(request).execute();
+            if (!response.isSuccessful()) {
+                throw new RuntimeException("Invalid Google token");
+            }
+
+            // Parse response
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.readTree(response.body().string());
+
+            String email = jsonNode.get("email").asText();
+            String name = jsonNode.get("name").asText();
+            String picture = jsonNode.has("picture") ? jsonNode.get("picture").asText() : null;
+
+            log.info("Google login attempt for email: {}", email);
+
+            // Check if user exists
+            User user = userRepository.findByEmail(email).orElse(null);
+
+            if (user == null) {
+                // Create new user
+                user = new User();
+                user.setEmail(email);
+                user.setName(name);
+                user.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
+                user.setRole(Role.STUDENT);
+                user.setProfileImage(picture);
+                user.setIsActive(true);
+
+                // Create student profile
+                Student student = new Student();
+                student.setUser(user);
+                user.setStudent(student);
+
+                user = userRepository.save(user);
+                log.info("New user created via Google: {}", email);
+            }
+
+            // Generate tokens
+            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+            String accessToken = jwtService.generateToken(userDetails);
+            String refreshToken = jwtService.generateRefreshToken(userDetails);
+
+            // Get student ID if applicable
+            Long studentId = null;
+            if (user.getRole() == Role.STUDENT) {
+                Student student = studentRepository.findByUserId(user.getId()).orElse(null);
+                if (student != null) {
+                    studentId = student.getId();
+                }
+            }
+
+            log.info("Google login successful for: {}", email);
+
+            return AuthResponse.builder()
+                    .token(accessToken)
+                    .refreshToken(refreshToken)
+                    .userId(user.getId())
+                    .studentId(studentId)
+                    .name(user.getName())
+                    .email(user.getEmail())
+                    .role(user.getRole())
+                    .build();
+
+        } catch (IOException e) {
+            log.error("Error verifying Google token", e);
+            throw new RuntimeException("Failed to verify Google token");
         }
     }
 

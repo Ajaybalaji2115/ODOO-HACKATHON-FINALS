@@ -22,6 +22,15 @@ import java.util.Map;
 public class AdminController {
 
     private final UserService userService;
+    private final com.example.skillforge.service.AuthService authService;
+
+    @PostMapping("/users")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<com.example.skillforge.dto.response.AuthResponse>> createUser(
+            @RequestBody @jakarta.validation.Valid com.example.skillforge.dto.request.RegisterRequest request) {
+        com.example.skillforge.dto.response.AuthResponse response = authService.createUser(request);
+        return ResponseEntity.ok(ApiResponse.success("User created successfully", response));
+    }
 
     @GetMapping("/dashboard")
     @PreAuthorize("hasRole('ADMIN')")
@@ -43,11 +52,12 @@ public class AdminController {
     public ResponseEntity<ApiResponse<UserResponse>> blockUser(
             @PathVariable Long id,
             @RequestBody Map<String, Object> request) {
-        
+
         String reason = (String) request.get("reason");
         int days = (Integer) request.get("days");
-        
-        return ResponseEntity.ok(ApiResponse.success("User blocked successfully", userService.blockUser(id, reason, days)));
+
+        return ResponseEntity
+                .ok(ApiResponse.success("User blocked successfully", userService.blockUser(id, reason, days)));
     }
 
     @DeleteMapping("/users/{id}")
@@ -55,8 +65,15 @@ public class AdminController {
     public ResponseEntity<ApiResponse<String>> deleteUser(
             @PathVariable Long id,
             @RequestParam String reason) {
-        
+
         userService.deleteUser(id, reason);
         return ResponseEntity.ok(ApiResponse.success("User deleted successfully", null));
+    }
+
+    @GetMapping("/list")
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> getAdminUsersList() {
+        List<Map<String, Object>> adminUsers = userService.getAdminUsers();
+        return ResponseEntity.ok(adminUsers);
     }
 }

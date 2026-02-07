@@ -549,10 +549,23 @@ export default function StudentDashboard() {
                           </>
                         ) : (
                           <button
-                            onClick={(e) => handleEnroll(e, course.id, course.title)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent card click
+                              navigate(`/courses/${course.id}`, { state: { from: 'dashboard' } });
+                            }}
+                            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 text-white
+                                ${course.accessRule === 'ON_PAYMENT'
+                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                                : 'bg-green-600 hover:bg-green-700'}`}
                           >
-                            Enroll Now
+                            {course.accessRule === 'ON_PAYMENT' ? (
+                              <>
+                                <Sparkles size={16} className="text-yellow-300" />
+                                <span>Buy for ₹{course.price}</span>
+                              </>
+                            ) : (
+                              "Enroll Free"
+                            )}
                           </button>
                         )}
                       </div>

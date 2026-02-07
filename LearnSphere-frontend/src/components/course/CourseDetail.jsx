@@ -9,9 +9,11 @@ import { enrollmentService } from '../../services/enrollmentService'
 import MaterialViewer from '../material/MaterialViewer'
 import QuizPlayer from '../quiz/QuizPlayer'
 import AIQuizGenerator from '../quiz/AIQuizGenerator'
+import QuizBuilder from '../quiz/QuizBuilder'
 import {
   ArrowLeft, BookOpen, Users, Clock, Award, Play, FileText,
-  CheckCircle, Plus, Edit, Trash2, Upload, ChevronDown, ChevronUp, X, Eye
+  CheckCircle, Plus, Edit, Trash2, Upload, ChevronDown, ChevronUp, X, Eye,
+  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles
 } from 'lucide-react'
 import Card from '../common/Card'
 import Loader from '../common/Loader'
@@ -28,7 +30,7 @@ import ConfirmModal from '../common/ConfirmModal'
 const CourseDetail = () => {
   // const { id } = useParams()
   const navigate = useNavigate()
-  const { user } = useSelector((state) => state.auth)
+  const { user, isAuthenticated } = useSelector((state) => state.auth)
   const location = useLocation()
 
   const [course, setCourse] = useState(null)
@@ -54,13 +56,23 @@ const CourseDetail = () => {
     orderIndex: 0
   })
 
+  // Material Modal State
+  const [materialModalTab, setMaterialModalTab] = useState('CONTENT') // CONTENT, DESCRIPTION, ATTACHMENTS
+  const [editingMaterial, setEditingMaterial] = useState(null)
   const [materialForm, setMaterialForm] = useState({
     type: 'VIDEO',
     title: '',
     description: '',
     link: '',
-    file: null
+    file: null,
+    responsible: '',
+    durationMinutes: '',
+    allowDownload: false,
+    existingAttachments: [],
+    topicId: null
   })
+  const [newAttachments, setNewAttachments] = useState([]) // Array of Files or Link Objects
+  const [activeMenuId, setActiveMenuId] = useState(null) // For 3-dot menu toggle
 
   const [mcqForm, setMcqForm] = useState({
     title: '',
@@ -237,12 +249,12 @@ const CourseDetail = () => {
 
     try {
       console.log("Fetching course:", courseId);
-      console.log("User Role " + user.role)
+      console.log("User Role:", user?.role || "Guest")
       // const res = await courseService.getCourseById(courseId, user?.userId);
 
       const res = await courseService.getCourseById(
         courseId,
-        user.role === "STUDENT" ? user.userId : null
+        user?.role === "STUDENT" ? user?.userId : null
 
       );
 
@@ -406,22 +418,121 @@ const CourseDetail = () => {
     }
   }
 
+
+  const loadRazorpay = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+  }
+
   const handleEnroll = async () => {
+    console.log('handleEnroll called - isAuthenticated:', isAuthenticated, 'user:', user)
+
+    // Check if user is logged in
+    if (!isAuthenticated) {
+      console.log('User not authenticated, redirecting to login...')
+      toast.error('Please log in to enroll in this course')
+      // Redirect to login with return URL
+      navigate(`/login?redirect=/courses/${courseId}`)
+      return
+    }
+
     if (!isStudent) {
       toast.error('Only students can enroll in courses')
       return
     }
     setEnrolling(true)
-    try {
-      await enrollmentService.enrollCourse(user.userId, courseId)
-      toast.success('Enrolled successfully!')
-      setIsEnrolled(true)
-      await fetchCourseData()
-    } catch (error) {
-      console.error('Enrollment error:', error)
-      toast.error('Failed to enroll in course')
-    } finally {
-      setEnrolling(false)
+
+    // Check if course is paid
+    if (course.price && course.price > 0) {
+      // Paid Course Flow
+      try {
+        const res = await loadRazorpay()
+        if (!res) {
+          toast.error('Razorpay SDK failed to load. Are you online?')
+          setEnrolling(false)
+          return
+        }
+
+        // Create Order
+        const orderData = await api.post(`/payment/create-order?courseId=${courseId}`)
+        const { amount, id: order_id, currency, key } = orderData.data
+
+        const options = {
+          key: key || "rzp_test_S2n8hNC4HsIQ0U", // Fallback if key not in response
+          amount: amount.toString(),
+          currency: currency,
+          name: "LearnSphere",
+          description: `Enrollment for ${course.title}`,
+          // image: "/logo.png", // Optional: Add logo url if available
+          order_id: order_id,
+          handler: async function (response) {
+            try {
+              const verifyData = {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                courseId: courseId.toString(),
+                studentId: user.userId.toString() // Send userId, backend expects it
+              }
+
+              const verifyRes = await api.post('/payment/verify', verifyData)
+              if (verifyRes.status === 200) {
+                toast.success('Payment Successful & Enrolled!')
+                setIsEnrolled(true)
+                await fetchCourseData()
+              } else {
+                toast.error('Payment verification failed')
+              }
+            } catch (err) {
+              console.error("Payment verification error", err)
+              toast.error('Payment verification failed')
+            }
+          },
+          prefill: {
+            name: user.name,
+            email: user.email,
+            contact: user.phone || "" // If phone available
+          },
+          notes: {
+            address: "LearnSphere Corporate Office"
+          },
+          theme: {
+            color: "#3399cc"
+          }
+        }
+
+        const paymentObject = new window.Razorpay(options)
+        paymentObject.open()
+
+        paymentObject.on('payment.failed', function (response) {
+          toast.error(response.error.description);
+        });
+
+      } catch (error) {
+        console.error('Payment initiation error:', error)
+        toast.error('Failed to initiate payment')
+      } finally {
+        setEnrolling(false)
+      }
+
+    } else {
+      // Free Course Flow (Existing)
+      try {
+        await enrollmentService.enrollCourse(user.userId, courseId)
+        toast.success('Enrolled successfully!')
+        setIsEnrolled(true)
+        await fetchCourseData()
+      } catch (error) {
+        console.error('Enrollment error:', error)
+        toast.error('Failed to enroll in course')
+      } finally {
+        setEnrolling(false)
+      }
     }
   }
 
@@ -513,55 +624,164 @@ const CourseDetail = () => {
     })
   }
 
+  /* -------------------------------------------------------------------------- */
+  /*                       MATERIAL HANDLERS (CREATE / EDIT)                    */
+  /* -------------------------------------------------------------------------- */
+
+  const handleEditMaterial = (material, topicId) => {
+    setEditingMaterial(material)
+    setSelectedTopicForMaterial(topicId)
+
+    // Populate form
+    setMaterialForm({
+      type: material.materialType,
+      title: material.title,
+      description: material.description || '',
+      link: material.externalUrl || '',
+      file: null, // File input cannot be pre-filled
+      responsible: material.responsible || '',
+      durationMinutes: material.durationMinutes || '',
+      allowDownload: material.allowDownload || false,
+      existingAttachments: material.attachments || []
+    })
+
+    setNewAttachments([])
+    setMaterialModalTab('CONTENT')
+    setShowMaterialModal(true)
+    setActiveMenuId(null) // Close menu
+  }
+
   const handleMaterialSubmit = async (e) => {
     e.preventDefault()
 
+    if (!materialForm.title.trim()) {
+      toast.error('Title is required')
+      return
+    }
+
     try {
-      if (materialForm.type === 'LINK') {
-        // For external links - use URL-encoded format
-        if (!materialForm.link) {
-          toast.error('Please enter a valid link')
-          return
-        }
-        const linkData = {
-          topicId: selectedTopicForMaterial,
-          title: materialForm.title,
-          description: materialForm.description || '',
-          link: materialForm.link
-        }
+      let responseMaterial = null
 
-        await materialService.createLinkMaterial(linkData)
-      } else {
-        // For file uploads (VIDEO, PDF)
-        if (!materialForm.file) {
-          toast.error('Please select a file to upload')
-          return
-        }
-
-        const maxSize = materialForm.type === 'VIDEO' ? 500 * 1024 * 1024 : 50 * 1024 * 1024
-        if (materialForm.file.size > maxSize) {
-          toast.error(`File too large! Max size: ${materialForm.type === 'VIDEO' ? '500MB' : '50MB'}`)
-          return
-        }
-
-        const formData = new FormData()
-        formData.append('topicId', selectedTopicForMaterial)
-        formData.append('title', materialForm.title)
-        formData.append('description', materialForm.description || '')
-        formData.append('materialType', materialForm.type)
-        formData.append('file', materialForm.file)
-
-        await materialService.uploadMaterial(formData)
+      const commonData = {
+        title: materialForm.title,
+        description: materialForm.description,
+        responsible: materialForm.responsible,
+        durationMinutes: materialForm.durationMinutes ? parseInt(materialForm.durationMinutes) : null,
+        allowDownload: materialForm.allowDownload
       }
 
-      toast.success('Material uploaded successfully!')
-      closeMaterialModal()
+      if (editingMaterial) {
+        // --- UPDATE MODE ---
+        const formData = new FormData()
+        formData.append('title', commonData.title)
+        formData.append('description', commonData.description || '')
+        if (commonData.responsible) formData.append('responsible', commonData.responsible)
+        if (commonData.durationMinutes) formData.append('durationMinutes', commonData.durationMinutes)
+        formData.append('allowDownload', commonData.allowDownload)
 
-      await fetchMaterials(selectedTopicForMaterial)
+        // If type changed or file/link updated
+        if (materialForm.type !== editingMaterial.materialType) {
+          formData.append('materialType', materialForm.type)
+        }
+
+        if (materialForm.type === 'LINK') {
+          if (materialForm.link) formData.append('link', materialForm.link)
+        } else {
+          if (materialForm.file) formData.append('file', materialForm.file)
+        }
+
+        responseMaterial = await materialService.updateMaterial(editingMaterial.id, formData)
+        toast.success('Material updated successfully')
+
+      } else {
+        // --- CREATE MODE ---
+        if (materialForm.type === 'LINK') {
+          if (!materialForm.link) {
+            toast.error('Please enter a valid link')
+            return
+          }
+          const linkData = {
+            topicId: selectedTopicForMaterial,
+            ...commonData,
+            link: materialForm.link
+          }
+          responseMaterial = await materialService.createLinkMaterial(linkData)
+
+        } else {
+          // VIDEO / PDF
+          if (!materialForm.file) {
+            toast.error('Please select a file')
+            return
+          }
+          const topicIdToUse = selectedTopicForMaterial || materialForm.topicId
+
+          if (!topicIdToUse) {
+            toast.error('Error: Topic ID is missing. Please close and reopen the modal.')
+            return
+          }
+
+          console.log('Submit - Selected Topic ID:', topicIdToUse)
+          const formData = new FormData()
+          formData.append('topicId', topicIdToUse)
+          formData.append('materialType', materialForm.type)
+          formData.append('file', materialForm.file)
+          formData.append('title', commonData.title)
+          formData.append('description', commonData.description || '')
+          if (commonData.responsible) formData.append('responsible', commonData.responsible)
+          if (commonData.durationMinutes) formData.append('durationMinutes', commonData.durationMinutes)
+          formData.append('allowDownload', commonData.allowDownload)
+
+          responseMaterial = await materialService.uploadMaterial(formData)
+        }
+        toast.success('Material created successfully')
+      }
+
+      // --- HANDLE NEW ATTACHMENTS (For both Create and Edit) ---
+      if (responseMaterial && newAttachments.length > 0) {
+        const materialId = responseMaterial.id
+        const uploadPromises = newAttachments.map(att => {
+          const attData = new FormData()
+          if (att.file) {
+            attData.append('file', att.file)
+          } else if (att.link) {
+            attData.append('link', att.link)
+          }
+          return materialService.addAttachment(materialId, attData)
+        })
+
+        await Promise.all(uploadPromises)
+        toast.success(`${newAttachments.length} attachments added`)
+      }
+
+      closeMaterialModal()
+      await fetchCourseData() // Refresh to see updates
+
     } catch (error) {
-      console.error('Material upload error:', error)
-      const errorMsg = error.response?.data?.message || error.message || 'Failed to upload material'
-      toast.error(errorMsg)
+      console.error('Material submit error:', error)
+      toast.error(error.message || 'Failed to save material')
+    }
+  }
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    try {
+      await materialService.deleteAttachment(attachmentId)
+      toast.success("Attachment removed")
+      // Refresh if editing
+      if (editingMaterial) {
+        // We need to refresh the editingMaterial state or just close modal
+        // Ideally fetch updated material
+      }
+      // Simplest is generic refresh
+      await fetchCourseData()
+
+      // If we are in modal, we should remove it from local state 'materialForm.existingAttachments'
+      setMaterialForm(prev => ({
+        ...prev,
+        existingAttachments: prev.existingAttachments.filter(a => a.id !== attachmentId)
+      }))
+
+    } catch (err) {
+      toast.error("Failed to delete attachment")
     }
   }
 
@@ -596,7 +816,8 @@ const CourseDetail = () => {
   const closeMaterialModal = () => {
     setShowMaterialModal(false)
     setSelectedTopicForMaterial(null)
-    setMaterialForm({ type: 'VIDEO', title: '', description: '', link: '', file: null })
+    setEditingMaterial(null)
+    setMaterialForm({ type: 'VIDEO', title: '', description: '', link: '', file: null, topicId: null })
     setMcqForm({
       title: '',
       description: '',
@@ -622,6 +843,11 @@ const CourseDetail = () => {
         component: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
         color: 'text-green-500',
         bg: 'bg-green-50'
+      },
+      IMAGE: {
+        component: <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>,
+        color: 'text-indigo-500',
+        bg: 'bg-indigo-50'
       },
       TEXT: {
         component: <FileText className="w-5 h-5" />,
@@ -852,6 +1078,20 @@ const CourseDetail = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
 
+
+        {/* NEW QUIZ BUILDER (Full Screen) */}
+        {showMCQUploadModal && (
+          <QuizBuilder
+            courseId={courseId}
+            topicId={selectedTopicForMCQ}
+            onBack={handleCloseMCQUploadModal}
+            onSuccess={() => {
+              handleCloseMCQUploadModal();
+              fetchCourseData();
+              toast.success("Quiz Published Successfully!");
+            }}
+          />
+        )}
 
         {/* 🔥 COMPLETION POPUP MODAL */}
         {showCompletionModal && (
@@ -1095,7 +1335,10 @@ const CourseDetail = () => {
                               <Button
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  console.log('Opening Modal for Topic:', topic.id)
                                   setSelectedTopicForMaterial(topic.id)
+                                  setMaterialForm(prev => ({ ...prev, topicId: topic.id }))
+                                  setEditingMaterial(null)
                                   setShowMaterialModal(true)
                                 }}
                                 variant="secondary"
@@ -1143,12 +1386,12 @@ const CourseDetail = () => {
                                   return (
                                     <div
                                       key={material.id}
-                                      className={`flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 transition-colors ${isLocked ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300 cursor-pointer'
+                                      className={`relative flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 transition-colors ${isLocked ? 'opacity-60 cursor-not-allowed' : 'hover:border-purple-300 cursor-pointer'
                                         }`}
                                       onClick={() => handleMaterialClick(material, topic.id)}
                                     >
-                                      <div className="flex items-center space-x-3 flex-1">
-                                        <div className={`${iconData.bg} p-2 rounded-lg relative`}>
+                                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                        <div className={`${iconData.bg} p-2 rounded-lg relative flex-shrink-0`}>
                                           <div className={iconData.color}>
                                             {iconData.component}
                                           </div>
@@ -1160,31 +1403,60 @@ const CourseDetail = () => {
                                             </div>
                                           )}
                                         </div>
-                                        <div className="flex-1">
+                                        <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-2">
-                                            <p className="font-medium text-gray-900">{material.title}</p>
+                                            <p className="font-medium text-gray-900 truncate">{material.title}</p>
                                             {isLocked && (
-                                              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">🔒 Locked</span>
+                                              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full flex-shrink-0">🔒 Locked</span>
                                             )}
                                           </div>
-                                          {material.description && (
-                                            <p className="text-xs text-gray-500">{material.description}</p>
-                                          )}
-                                          <p className="text-xs text-gray-400 mt-1">
-                                            {material.materialType} • {isLocked ? 'Enroll to access' : 'Click to view'}
-                                          </p>
+                                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                                            <span className="capitalize">{material.materialType.toLowerCase()}</span>
+                                            {material.durationMinutes && (
+                                              <>
+                                                <span>•</span>
+                                                <span>{material.durationMinutes} min</span>
+                                              </>
+                                            )}
+                                            {material.responsible && (
+                                              <>
+                                                <span>•</span>
+                                                <span className="truncate max-w-[100px]">{material.responsible}</span>
+                                              </>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
+
                                       {isInstructor && (
-                                        <Button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleDeleteMaterial(material.id, topic.id)
-                                          }}
-                                          variant="danger"
-                                          size="sm"
-                                          icon={Trash2}
-                                        />
+                                        <div className="relative ml-2" onClick={(e) => e.stopPropagation()}>
+                                          <button
+                                            onClick={() => setActiveMenuId(activeMenuId === material.id ? null : material.id)}
+                                            className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
+                                          >
+                                            <MoreVertical size={18} />
+                                          </button>
+
+                                          {activeMenuId === material.id && (
+                                            <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                              <button
+                                                onClick={() => handleEditMaterial(material, topic.id)}
+                                                className="w-full text-left px-4 py-2 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-2 transition-colors"
+                                              >
+                                                <Edit size={14} className="text-purple-600" /> Edit
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  handleDeleteMaterial(material.id, topic.id)
+                                                  setActiveMenuId(null)
+                                                }}
+                                                className="w-full text-left px-4 py-2 hover:bg-red-50 text-sm text-red-600 flex items-center gap-2 transition-colors"
+                                              >
+                                                <Trash2 size={14} /> Delete
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
                                   )
@@ -1283,28 +1555,69 @@ const CourseDetail = () => {
           <Card className="p-6 sticky top-24">
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-6">
-                <span className="text-3xl font-bold text-gray-900">Free</span>
-                <Award size={32} className="text-yellow-500" />
+                <div>
+                  {course.accessRule === 'ON_PAYMENT' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-3xl font-bold text-gray-900">
+                        ₹{course.price?.toFixed(2)}
+                      </span>
+                      {/* Show a "fake" original price (20% higher) to indicate offer/value if user wants "instructor amount" struck out */}
+                      <span className="text-sm font-medium text-gray-500 line-through">
+                        ₹{((course.price || 0) * 1.25).toFixed(2)}
+                      </span>
+                      <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                        20% OFF
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-3xl font-bold text-gray-900">Free</span>
+                  )}
+                </div>
+                {course.accessRule === 'ON_PAYMENT' ? (
+                  <div className="p-2 bg-yellow-100 rounded-full">
+                    <IndianRupee size={24} className="text-yellow-600" />
+                  </div>
+                ) : (
+                  <Award size={32} className="text-yellow-500" />
+                )}
               </div>
 
+              {/* ENROLL / BUY BUTTON */}
               {isEnrolled ? (
                 <Button variant="success" size="lg" className="w-full" icon={Play}>
                   Continue Learning
                 </Button>
-              ) : isStudent ? (
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="w-full"
-                  onClick={handleEnroll}
-                  disabled={enrolling}
-                >
-                  {enrolling ? 'Enrolling...' : 'Enroll Now'}
-                </Button>
               ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-gray-600">Login as student to enroll</p>
-                </div>
+                // Show if Student OR Guest (not authenticated)
+                // Instructors/Admins don't see Buy button usually, but if needed we can remove check
+                (!user || user.role === 'STUDENT') && (
+                  <button
+                    onClick={handleEnroll}
+                    disabled={enrolling}
+                    className={`w-full py-4 px-6 rounded-xl shadow-lg transform transition-all duration-200 
+                      ${course.accessRule === 'ON_PAYMENT'
+                        ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-700 hover:via-indigo-700 hover:to-purple-700 text-white hover:shadow-xl hover:-translate-y-1'
+                        : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white hover:shadow-xl hover:-translate-y-1'
+                      } 
+                      flex items-center justify-center space-x-2 font-bold text-lg
+                      ${enrolling ? 'opacity-70 cursor-wait' : ''}
+                    `}
+                  >
+                    {enrolling ? (
+                      <span>Processing...</span>
+                    ) : (
+                      <>
+                        {course.accessRule === 'ON_PAYMENT' ? <IndianRupee size={22} /> : course.accessRule === 'ON_INVITATION' ? <Lock size={22} /> : null}
+                        <span>
+                          {course.accessRule === 'ON_PAYMENT' ? `Buy Now for ₹${course.price?.toFixed(2)}` :
+                            course.accessRule === 'ON_INVITATION' ? 'Request Access' :
+                              'Enroll Now - It\'s Free!'}
+                        </span>
+                        {course.accessRule === 'ON_PAYMENT' && <Sparkles size={20} className="text-yellow-300 animate-pulse ml-1" />}
+                      </>
+                    )}
+                  </button>
+                )
               )}
 
               <div className="pt-6 border-t space-y-3">
@@ -1385,93 +1698,267 @@ const CourseDetail = () => {
       }
 
       {/* Material Modal */}
+      {/* Material Modal (A4 Multi-Tab Editor) */}
       {
         showMaterialModal && (
           <div className="fixed inset-0 backdrop-blur-md bg-white/10 flex items-center justify-center z-50 p-4 transition-all duration-300">
-            <Card className="max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto border-2 border-purple-400 shadow-xl rounded-2xl bg-white/90 backdrop-blur-lg">
+            <Card className="max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto border-2 border-purple-400 shadow-xl rounded-2xl bg-white/90 backdrop-blur-lg">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Add Material</h3>
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingMaterial ? 'Edit Material' : 'Add Material'}
+                </h3>
                 <button onClick={closeMaterialModal}>
                   <X size={24} className="text-gray-500 hover:text-gray-700" />
                 </button>
               </div>
-              <form onSubmit={handleMaterialSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-700">Material Type</label>
-                  <select
-                    value={materialForm.type}
-                    onChange={(e) => setMaterialForm({ ...materialForm, type: e.target.value, file: null, link: '' })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+
+              {/* TABS HEADER */}
+              <div className="flex border-b border-gray-200 mb-6">
+                {['CONTENT', 'DESCRIPTION', 'ATTACHMENTS'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setMaterialModalTab(tab)}
+                    className={`px-4 py-2 font-medium text-sm transition-colors relative ${materialModalTab === tab
+                      ? 'text-purple-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                      }`}
                   >
-                    <option value="VIDEO">Video</option>
-                    <option value="PDF">PDF Document</option>
-                    <option value="LINK">External Link</option>
-                  </select>
-                </div>
-
-                <Input
-                  label="Title"
-                  value={materialForm.title}
-                  onChange={(e) => setMaterialForm({ ...materialForm, title: e.target.value })}
-                  required
-                  placeholder="Enter material title"
-                />
-
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-700">Description (Optional)</label>
-                  <textarea
-                    value={materialForm.description}
-                    onChange={(e) => setMaterialForm({ ...materialForm, description: e.target.value })}
-                    rows="2"
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                    placeholder="Enter description"
-                  />
-                </div>
-
-                {materialForm.type === 'LINK' ? (
-                  <Input
-                    label="Link URL"
-                    type="url"
-                    value={materialForm.link}
-                    onChange={(e) => setMaterialForm({ ...materialForm, link: e.target.value })}
-                    placeholder="https://example.com or https://youtube.com/watch?v=..."
-                    required
-                  />
-                ) : materialForm.type !== 'MCQ' ? (
-                  <div className="space-y-1">
-                    <label className="block text-sm font-medium text-gray-700">Upload File</label>
-                    <input
-                      type="file"
-                      onChange={(e) => {
-                        const file = e.target.files[0]
-                        if (file) {
-                          const maxSize = materialForm.type === 'VIDEO' ? 500 * 1024 * 1024 : 50 * 1024 * 1024
-                          if (file.size > maxSize) {
-                            toast.error(`File too large! Max: ${materialForm.type === 'VIDEO' ? '500MB' : '50MB'}`)
-                            e.target.value = ''
-                            return
-                          }
-                        }
-                        setMaterialForm({ ...materialForm, file })
-                      }}
-                      accept={materialForm.type === 'VIDEO' ? 'video/*' : 'application/pdf'}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      required
-                    />
-                    {materialForm.file && (
-                      <p className="text-xs text-gray-600 mt-1">
-                        Selected: {materialForm.file.name} ({(materialForm.file.size / 1024 / 1024).toFixed(2)} MB)
-                      </p>
+                    {tab.charAt(0) + tab.slice(1).toLowerCase()}
+                    {materialModalTab === tab && (
+                      <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full" />
                     )}
-                    <p className="text-xs text-gray-500 mt-1">
-                      {materialForm.type === 'VIDEO' ? 'Max size: 500MB' : 'Max size: 50MB'}
-                    </p>
-                  </div>
-                ) : null}
+                  </button>
+                ))}
+              </div>
 
-                <div className="flex space-x-3 pt-4">
+              <form onSubmit={handleMaterialSubmit} className="space-y-6">
+
+                {/* --- TAB: CONTENT --- */}
+                <div className={materialModalTab === 'CONTENT' ? 'block' : 'hidden'}>
+                  <div className="space-y-4">
+                    {/* Row 1: Type & Title */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="md:col-span-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                        <select
+                          value={materialForm.type}
+                          onChange={(e) => setMaterialForm({ ...materialForm, type: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          disabled={!!editingMaterial} // Prevent type change on edit to simplify logic
+                        >
+                          <option value="VIDEO">Video</option>
+                          <option value="PDF">Document</option>
+                          <option value="LINK">Link</option>
+                        </select>
+                        {editingMaterial && <p className="text-xs text-gray-400 mt-1">Type cannot be changed</p>}
+                      </div>
+                      <div className="md:col-span-3">
+                        <Input
+                          label="Title"
+                          value={materialForm.title}
+                          onChange={(e) => setMaterialForm({ ...materialForm, title: e.target.value })}
+                          required
+                          placeholder="Lesson title"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 2: Responsible & Duration */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="Responsible Person (Optional)"
+                        value={materialForm.responsible}
+                        onChange={(e) => setMaterialForm({ ...materialForm, responsible: e.target.value })}
+                        placeholder="e.g. Instructor Name"
+                      />
+                      <Input
+                        label="Duration (Minutes) (Optional)"
+                        type="number"
+                        value={materialForm.durationMinutes}
+                        onChange={(e) => setMaterialForm({ ...materialForm, durationMinutes: e.target.value })}
+                        placeholder="e.g. 15"
+                      />
+                    </div>
+
+                    {/* Row 3: Type Specific Input */}
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                      {materialForm.type === 'LINK' ? (
+                        <Input
+                          label="External Link URL"
+                          value={materialForm.link}
+                          onChange={(e) => setMaterialForm({ ...materialForm, link: e.target.value })}
+                          placeholder="https://..."
+                          required
+                        />
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            {editingMaterial ? 'Replace File (Optional)' : 'Upload File'}
+                          </label>
+                          <div className="flex items-center gap-4">
+                            <input
+                              type="file"
+                              onChange={(e) => setMaterialForm({ ...materialForm, file: e.target.files[0] })}
+                              accept={materialForm.type === 'VIDEO' ? 'video/*' : 'application/pdf'}
+                              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                              required={!editingMaterial && !materialForm.file} // Required only on create if no file selected
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Max size: {materialForm.type === 'VIDEO' ? '500MB' : '50MB'}
+                          </p>
+                          {/* Show selected file name if present (persisted across tab switches) */}
+                          {materialForm.file && (
+                            <p className="text-xs text-green-600 font-medium mt-1">
+                              Selected: {materialForm.file.name}
+                            </p>
+                          )}
+
+                          {/* Allow Download Toggle for PDF */}
+                          {materialForm.type === 'PDF' && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <input
+                                type="checkbox"
+                                id="allowDownload"
+                                checked={materialForm.allowDownload}
+                                onChange={(e) => setMaterialForm({ ...materialForm, allowDownload: e.target.checked })}
+                                className="rounded text-purple-600 focus:ring-purple-500"
+                              />
+                              <label htmlFor="allowDownload" className="text-sm text-gray-700">Allow students to download this file</label>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* --- TAB: DESCRIPTION --- */}
+                <div className={materialModalTab === 'DESCRIPTION' ? 'block' : 'hidden'}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Description</label>
+                    <textarea
+                      value={materialForm.description}
+                      onChange={(e) => setMaterialForm({ ...materialForm, description: e.target.value })}
+                      rows="8"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 resize-none font-normal text-gray-600 leading-relaxed"
+                      placeholder="Describe what this lesson covers..."
+                    />
+                  </div>
+                </div>
+
+                {/* --- TAB: ATTACHMENTS --- */}
+                <div className={materialModalTab === 'ATTACHMENTS' ? 'block' : 'hidden'}>
+                  <div className="space-y-6">
+                    {/* Existing Attachments */}
+                    {materialForm.existingAttachments && materialForm.existingAttachments.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-900 mb-2">Current Attachments</h4>
+                        <div className="space-y-2">
+                          {materialForm.existingAttachments.map(att => (
+                            <div key={att.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                {att.externalUrl ? <LinkIcon size={16} className="text-blue-500" /> : <File size={16} className="text-gray-500" />}
+                                <a href={att.externalUrl || att.fileUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline truncate">
+                                  {att.fileName || att.externalUrl}
+                                </a>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                className="text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors"
+                                title="Remove attachment"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Attachments List */}
+                    {newAttachments.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-bold text-green-700 mb-2">New Attachments (Unsaved)</h4>
+                        <div className="space-y-2">
+                          {newAttachments.map((att, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                {att.link ? <LinkIcon size={16} className="text-blue-500" /> : <File size={16} className="text-gray-500" />}
+                                <span className="text-sm text-gray-700 truncate">
+                                  {att.file ? att.file.name : att.link}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setNewAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                className="text-gray-400 hover:text-red-500 p-1.5 rounded-full"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add New Attachment Form */}
+                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                      <label className="block text-sm font-bold text-blue-900 mb-3">Add Extra Resource</label>
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <input
+                            type="file"
+                            className="flex-1 text-sm text-gray-500 bg-white border border-blue-200 rounded-lg p-2"
+                            onChange={(e) => {
+                              if (e.target.files[0]) {
+                                setNewAttachments([...newAttachments, { file: e.target.files[0] }])
+                                e.target.value = '' // reset input
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="text-center text-xs text-gray-400 font-medium">OR</div>
+                        <div className="flex gap-2">
+                          <Input
+                            className="flex-1 bg-white border-blue-200"
+                            placeholder="Paste external link..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                const val = e.target.value
+                                if (val) {
+                                  setNewAttachments([...newAttachments, { link: val }])
+                                  e.target.value = ''
+                                }
+                              }
+                            }}
+                            id="add-link-input" // adding ID to find it manually if needed
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              const el = document.getElementById('add-link-input')
+                              if (el && el.value) {
+                                setNewAttachments([...newAttachments, { link: el.value }])
+                                el.value = ''
+                              }
+                            }}
+                          >
+                            Add Link
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-4 border-t border-gray-100">
                   <Button type="submit" variant="primary" className="flex-1" icon={Upload}>
-                    Upload Material
+                    {editingMaterial ? 'Update Lesson' : 'Create Lesson'}
                   </Button>
                   <Button type="button" variant="secondary" onClick={closeMaterialModal} className="flex-1">
                     Cancel

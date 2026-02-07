@@ -11,6 +11,10 @@ const CertificateDownload = ({ courseId, isCompleted, studentId }) => {
     const [showPreview, setShowPreview] = useState(false)
 
     const generateCertificate = async () => {
+        if (!studentId) {
+            toast.error("Student ID missing. Please refresh or contact support.");
+            return;
+        }
         setGenerating(true)
         try {
             const token = localStorage.getItem('token')
@@ -124,9 +128,10 @@ const CertificateDownload = ({ courseId, isCompleted, studentId }) => {
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Button
                             onClick={handlePreview}
-                            disabled={generating}
+                            disabled={generating || !studentId}
                             variant="outline"
                             size="sm"
+                            title={!studentId ? "Student ID Missing" : "Preview Certificate"}
                             className="flex-1 sm:flex-none justify-center"
                         >
                             {/* Pass custom content to children for correct alignment */}
@@ -138,9 +143,10 @@ const CertificateDownload = ({ courseId, isCompleted, studentId }) => {
 
                         <Button
                             onClick={handleDownload}
-                            disabled={generating}
+                            disabled={generating || !studentId}
                             variant="primary"
                             size="sm"
+                            title={!studentId ? "Student ID Missing" : "Download Certificate"}
                             className="flex-1 sm:flex-none justify-center shadow-sm"
                         >
                             <div className="flex items-center gap-2">

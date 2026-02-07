@@ -10,4 +10,10 @@ public class ManualQuizRequest {
     private String title;
     private Integer duration;
     private List<ManualQuestion> questions;
+
+    // Rewards
+    private Integer rewardFirstTry;
+    private Integer rewardSecondTry;
+    private Integer rewardThirdTry;
+    private Integer rewardFourthPlus;
 }

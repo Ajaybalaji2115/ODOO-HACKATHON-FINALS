@@ -119,7 +119,8 @@ const QuizIntro = () => {
                                     {[
                                         "This assessment consists of multiple-choice questions designed to test your mastery of the topic.",
                                         "A score of 70% or higher is required to unlock the 'Completed' status for this topic.",
-                                        "You may retake this assessment as many times as needed to improve your score.",
+                                        "Challenge yourself! Earn maximum reward points by achieving a passing score on your first attempt.",
+                                        "Points are awarded based on proficiency; fewer attempts demonstrate higher mastery and yield greater rewards.",
                                         "Please ensure you have a stable internet connection before beginning."
                                     ].map((item, idx) => (
                                         <li key={idx} className="flex items-start">

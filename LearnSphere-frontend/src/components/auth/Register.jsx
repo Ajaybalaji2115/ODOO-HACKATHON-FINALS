@@ -7,8 +7,7 @@ import Input from '../common/Input'
 import Button from '../common/Button'
 
 const Register = () => {
-  const [searchParams] = useSearchParams()
-  const roleParam = searchParams.get('role')
+
 
   const [formData, setFormData] = useState({
     name: '',
@@ -21,7 +20,7 @@ const Register = () => {
     specialization: ''
   })
   const [errors, setErrors] = useState({})
-  const [isRoleLocked, setIsRoleLocked] = useState(false)
+
 
   // Password Visibility State
   const [showPassword, setShowPassword] = useState(false)
@@ -44,15 +43,7 @@ const Register = () => {
   const navigate = useNavigate()
   const { loading } = useSelector((state) => state.auth)
 
-  useEffect(() => {
-    if (roleParam) {
-      const normalizedRole = roleParam.toUpperCase()
-      if (['STUDENT', 'INSTRUCTOR', 'ADMIN'].includes(normalizedRole)) {
-        setFormData(prev => ({ ...prev, role: normalizedRole }))
-        setIsRoleLocked(true)
-      }
-    }
-  }, [roleParam])
+
 
   // Scroll Indicator Logic
   const checkScroll = () => {
@@ -118,9 +109,7 @@ const Register = () => {
       newErrors.confirmPassword = 'Passwords do not match'
     }
 
-    if (formData.role === 'INSTRUCTOR' && !formData.specialization.trim()) {
-      newErrors.specialization = 'Specialization is required for Instructors'
-    }
+
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -180,9 +169,7 @@ const Register = () => {
             </div>
             <h2 className="text-4xl font-black mb-6 tracking-tight">Start Your Journey</h2>
             <p className="text-lg text-indigo-100 leading-relaxed max-w-sm mx-auto mb-8">
-              {formData.role === 'INSTRUCTOR'
-                ? "Inspire the next generation. Share your knowledge and create a lasting impact on global learners."
-                : "Unlock your potential. Master the skills that will shape your future and career."}
+              "Unlock your potential. Master the skills that will shape your future and career."
             </p>
 
             <div className="space-y-4 text-left max-w-xs mx-auto">
@@ -247,21 +234,7 @@ const Register = () => {
                 <p className="text-gray-500 font-medium">Join the community and start learning today.</p>
               </div>
 
-              {/* Role Badge (If locked) */}
-              {isRoleLocked && (
-                <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-indigo-600 text-white p-2.5 rounded-lg shadow-md shadow-indigo-600/20">
-                      {formData.role === 'INSTRUCTOR' ? <UserPlus size={20} /> : <User size={20} />}
-                    </div>
-                    <div>
-                      <p className="text-xs text-indigo-500 font-bold uppercase tracking-wider">You are joining as</p>
-                      <p className="font-extrabold text-indigo-900 text-lg">{formData.role === 'INSTRUCTOR' ? 'Instructor' : 'Student'}</p>
-                    </div>
-                  </div>
-                  <Link to="/register" onClick={() => setIsRoleLocked(false)} className="text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:underline px-2">Change</Link>
-                </div>
-              )}
+
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-4">
@@ -381,41 +354,9 @@ const Register = () => {
                     )}
                   </div>
 
-                  {/* Role Select (Only if NOT locked) */}
-                  {!isRoleLocked && (
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5 ml-1">Role</label>
-                      <select
-                        name="role"
-                        value={formData.role}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 bg-white font-medium outline-none transition-all hover:border-blue-300/50 text-gray-700"
-                      >
-                        <option value="STUDENT">Student</option>
-                        <option value="INSTRUCTOR">Instructor</option>
-                        <option value="ADMIN">Admin</option>
-                      </select>
-                    </div>
-                  )}
 
-                  {/* Specialization (Instructor Only) */}
-                  {formData.role === 'INSTRUCTOR' && (
-                    <div className="animate-fade-in-up">
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5 ml-1">Specialization</label>
-                      <Input
-                        type="text"
-                        name="specialization"
-                        value={formData.specialization}
-                        onChange={handleChange}
-                        placeholder="e.g. Web Development"
-                      />
-                      {errors.specialization && (
-                        <p className="mt-1 text-sm text-red-600 flex items-center gap-1 font-medium ml-1">
-                          <AlertCircle size={14} /> {errors.specialization}
-                        </p>
-                      )}
-                    </div>
-                  )}
+
+
 
                   {/* Terms and Conditions Checkbox */}
                   <div className="flex items-start gap-3 mt-4 pt-2">

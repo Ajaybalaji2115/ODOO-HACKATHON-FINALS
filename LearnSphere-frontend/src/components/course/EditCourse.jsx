@@ -2,12 +2,21 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { courseService } from '../../services/courseService'
-import { ArrowLeft, Save, Eye, Upload, Power } from 'lucide-react'
+import { ArrowLeft, Save, Eye, UserPlus, Mail, Upload } from 'lucide-react'
 import Card from '../common/Card'
-import Input from '../common/Input'
 import Button from '../common/Button'
 import Loader from '../common/Loader'
+import AddAttendeesModal from './AddAttendeesModal'
+import ContactAttendeesModal from './ContactAttendeesModal'
 import toast from 'react-hot-toast'
+
+
+// Tab Components
+import CourseEditTabs from './tabs/CourseEditTabs'
+import BasicInfoTab from './tabs/BasicInfoTab'
+
+import OptionsTab from './tabs/OptionsTab'
+import { userService } from '../../services/userService'
 
 const EditCourse = () => {
   const { id } = useParams()
@@ -17,6 +26,22 @@ const EditCourse = () => {
   const [loading, setLoading] = useState(true)
   const [publishing, setPublishing] = useState(false)
   const [course, setCourse] = useState(null)
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState('basic')
+
+  // Shared Modals
+  const [showAddAttendeesModal, setShowAddAttendeesModal] = useState(false)
+  const [showContactAttendeesModal, setShowContactAttendeesModal] = useState(false)
+
+  // Image Upload State (Passed to BasicInfoTab)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [imageInputMethod, setImageInputMethod] = useState('url') // 'url' or 'upload'
+
+  // Admin Users for Options Tab
+  const [adminUsers, setAdminUsers] = useState([])
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -25,11 +50,15 @@ const EditCourse = () => {
     thumbnailUrl: '',
     category: '',
     tags: '',
-    courseAdminUserId: null
+    courseAdminUserId: null,
+    visibility: 'EVERYONE',
+    accessRule: 'OPEN',
+    price: ''
   })
 
   useEffect(() => {
     fetchCourseData()
+    fetchAdminUsers()
   }, [id])
 
   const fetchCourseData = async () => {
@@ -38,245 +67,228 @@ const EditCourse = () => {
       const response = await courseService.getCourseById(id, null)
       const courseData = response?.data?.data || response?.data || response
 
-      if (courseData) {
-        setCourse(courseData)
-        setFormData({
-          title: courseData.title || '',
-          description: courseData.description || '',
-          difficultyLevel: courseData.difficultyLevel || 'BEGINNER',
-          duration: courseData.duration || '',
-          thumbnailUrl: courseData.thumbnailUrl || '',
-          category: courseData.category || '',
-          tags: courseData.tags || '',
-          courseAdminUserId: courseData.courseAdminUserId || null
-        })
+      setCourse(courseData)
+      setFormData({
+        title: courseData.title || '',
+        description: courseData.description || '',
+        difficultyLevel: courseData.difficultyLevel || 'BEGINNER',
+        duration: courseData.duration || '',
+        thumbnailUrl: courseData.thumbnailUrl || '',
+        category: courseData.category || '',
+        tags: courseData.tags || '',
+        courseAdminUserId: courseData.courseAdminUserId || null,
+        // Set defaults for new fields if they're null (for existing courses)
+        visibility: courseData.visibility || 'EVERYONE',
+        accessRule: courseData.accessRule || 'OPEN',
+        price: courseData.price || ''
+      })
+      setImagePreview(courseData.thumbnailUrl)
+      if (courseData.thumbnailUrl && !courseData.thumbnailUrl.startsWith('http')) {
+        // If it's a relative path or something, we might assume upload, but URL input works for both if full path
       }
     } catch (error) {
-      console.error('Error fetching course:', error)
-      toast.error('Failed to load course data')
+      console.error('Failed to fetch course:', error)
+      toast.error('Failed to load course details')
+      navigate('/courses')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+  const fetchAdminUsers = async () => {
+    try {
+      const res = await courseService.getPotentialCourseAdmins()
+      setAdminUsers(res.data || [])
+    } catch (error) {
+      console.error("Failed to fetch admin users", error)
+    }
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const formDataUpload = new FormData()
+    formDataUpload.append('file', file)
+
+    try {
+      setUploadingImage(true)
+      const response = await courseService.uploadCourseImage(id, formDataUpload)
+
+      const imageUrl = response.imageUrl || response
+      setFormData(prev => ({ ...prev, thumbnailUrl: imageUrl }))
+      setImagePreview(imageUrl)
+      toast.success('Image uploaded successfully')
+    } catch (error) {
+      console.error('Upload failed:', error)
+      toast.error('Failed to upload image')
+    } finally {
+      setUploadingImage(false)
+    }
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+
+    // Validate price if access rule is ON_PAYMENT
+    if (formData.accessRule === 'ON_PAYMENT') {
+      if (!formData.price || formData.price <= 0) {
+        toast.error('Price is required and must be greater than 0 when Access Rule is "On Payment"')
+        return
+      }
+    }
 
     try {
-      setLoading(true)
-      await courseService.updateCourse(id, formData)
-      toast.success('Course updated successfully!')
-      fetchCourseData() // Refresh data
+      const payload = {
+        ...formData,
+        duration: Number(formData.duration) || 0,
+        // Ensure category is not empty
+        category: formData.category || 'General',
+        // Ensure other fields are correctly formatted
+      }
+
+      console.log('Submitting payload:', payload)
+      await courseService.updateCourse(id, payload)
+      toast.success('Course updated successfully')
+      // Optionally refresh data
+      fetchCourseData()
     } catch (error) {
-      console.error('Error updating course:', error)
-      toast.error('Failed to update course')
-    } finally {
-      setLoading(false)
+      console.error('Update failed:', error)
+      console.error('Error response:', error.response?.data)
+      console.error('Error status:', error.response?.status)
+      toast.error(error.response?.data?.message || 'Failed to update course')
     }
   }
 
   const handlePublishToggle = async () => {
     try {
       setPublishing(true)
-      if (course?.isPublished) {
-        // Unpublish not implemented yet
-        toast.error('Unpublish feature coming soon')
-      } else {
-        await courseService.publishCourse(id)
-        toast.success('Course published successfully!')
-        fetchCourseData()
-      }
+
+      // Call dedicated publish endpoint which toggles status
+      const response = await courseService.publishCourse(id)
+
+      // Determine new status from response or toggle current
+      // Ideally API returns new status. Based on backend change: ApiResponse<Boolean>
+      // response.data should be the boolean status if using standard Axios, but let's check wrapper
+      // Our services usually return response.data if using interceptor or wrapper unwrapping
+      // Let's safe check. If endpoint returns ApiResponse object { success, message, data: boolean }
+
+      const newStatus = response?.data === true || response?.data === false ? response.data : !course.isPublished
+
+      setCourse({ ...course, isPublished: newStatus })
+      toast.success(newStatus ? 'Course published successfully' : 'Course unpublished successfully')
     } catch (error) {
-      console.error('Error toggling publish:', error)
+      console.error('Publish update failed:', error)
       toast.error('Failed to update publish status')
     } finally {
       setPublishing(false)
     }
   }
 
-  const handlePreview = () => {
-    window.open(`/courses/${id}`, '_blank')
-  }
-
-  const handleCancel = () => {
-    navigate(`/courses/${id}`)
-  }
-
   if (loading) return <Loader />
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header with Actions */}
-      <div className="mb-8">
-        <button
-          onClick={handleCancel}
-          className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-        >
-          <ArrowLeft size={20} />
-          <span>Back to Course</span>
-        </button>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <button
+            onClick={() => navigate('/courses')}
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-2 transition-colors"
+          >
+            <ArrowLeft size={20} />
+            <span>Back to Courses</span>
+          </button>
+          <h1 className="text-3xl font-bold text-gray-900">Edit Course</h1>
+          <p className="text-gray-500 mt-1">{course?.title}</p>
+        </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Edit Course</h1>
-            <p className="text-gray-600">Update your course details</p>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            className={course?.isPublished ? "text-yellow-600 border-yellow-600 hover:bg-yellow-50" : "text-green-600 border-green-600 hover:bg-green-50"}
+            onClick={handlePublishToggle}
+            disabled={publishing}
+          >
+            {course?.isPublished ? 'Unpublish' : 'Publish'}
+          </Button>
 
-          {/* Header Actions */}
-          <div className="flex items-center space-x-3">
-            {/* Publish Toggle */}
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium text-gray-700">
-                {course?.isPublished ? 'Published' : 'Draft'}
-              </span>
-              <button
-                onClick={handlePublishToggle}
-                disabled={publishing}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${course?.isPublished ? 'bg-green-600' : 'bg-gray-300'
-                  } ${publishing ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${course?.isPublished ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                />
-              </button>
-            </div>
+          <Button
+            variant="secondary"
+            icon={Eye}
+            onClick={() => navigate('/courses/' + id)}
+          >
+            Preview
+          </Button>
 
-            {/* Preview Button */}
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              onClick={handlePreview}
-              icon={Eye}
-            >
-              Preview
-            </Button>
-          </div>
+          <Button
+            variant="secondary"
+            icon={UserPlus}
+            onClick={() => setShowAddAttendeesModal(true)}
+          >
+            Add Attendees
+          </Button>
+
+          <Button
+            variant="secondary"
+            icon={Mail}
+            onClick={() => setShowContactAttendeesModal(true)}
+          >
+            Contact
+          </Button>
+
+          <Button
+            variant="primary"
+            icon={Save}
+            onClick={handleSubmit}
+          >
+            Save Changes
+          </Button>
         </div>
       </div>
 
-      <Card className="p-6 md:p-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Input
-            label="Course Title"
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="e.g., Introduction to Web Development"
-            required
+      {/* TABS */}
+      <CourseEditTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      {/* TAB CONTENT */}
+      <div className="mt-6">
+        {activeTab === 'basic' && (
+          <BasicInfoTab
+            formData={formData}
+            setFormData={setFormData}
+            imagePreview={imagePreview}
+            setImagePreview={setImagePreview}
+            imageInputMethod={imageInputMethod}
+            setImageInputMethod={setImageInputMethod}
+            uploadingImage={uploadingImage}
+            handleImageUpload={handleImageUpload}
           />
+        )}
 
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-gray-700">
-              Description <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              placeholder="Describe what students will learn in this course..."
-              rows="4"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              required
-            />
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-700">
-                Difficulty Level <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="difficultyLevel"
-                value={formData.difficultyLevel}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="BEGINNER">Beginner</option>
-                <option value="INTERMEDIATE">Intermediate</option>
-                <option value="ADVANCED">Advanced</option>
-              </select>
-            </div>
 
-            <Input
-              label="Duration (minutes)"
-              type="number"
-              name="duration"
-              value={formData.duration}
-              onChange={handleChange}
-              placeholder="e.g., 120"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-700">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select Category</option>
-                <option value="DEVELOPMENT">Development</option>
-                <option value="BUSINESS">Business</option>
-                <option value="FINANCE">Finance</option>
-                <option value="IT_SOFTWARE">IT & Software</option>
-                <option value="MARKETING">Marketing</option>
-                <option value="DESIGN">Design</option>
-                <option value="PERSONAL_DEVELOPMENT">Personal Development</option>
-              </select>
-            </div>
-            <Input
-              label="Tags (comma separated)"
-              type="text"
-              name="tags"
-              value={formData.tags}
-              onChange={handleChange}
-              placeholder="e.g., java, spring boot, backend"
-            />
-          </div>
-
-          <Input
-            label="Thumbnail URL (Optional)"
-            type="url"
-            name="thumbnailUrl"
-            value={formData.thumbnailUrl}
-            onChange={handleChange}
-            placeholder="https://example.com/image.jpg"
+        {activeTab === 'options' && (
+          <OptionsTab
+            formData={formData}
+            setFormData={setFormData}
+            adminUsers={adminUsers}
+            user={user}
           />
+        )}
+      </div>
 
-          <div className="flex items-center space-x-4 pt-4">
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              disabled={loading}
-              icon={Save}
-            >
-              {loading ? 'Updating...' : 'Update Course'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              onClick={handleCancel}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </Card>
+      {/* Modals outside tabs */}
+      <AddAttendeesModal
+        isOpen={showAddAttendeesModal}
+        onClose={() => setShowAddAttendeesModal(false)}
+        courseId={id}
+      />
+
+      <ContactAttendeesModal
+        isOpen={showContactAttendeesModal}
+        onClose={() => setShowContactAttendeesModal(false)}
+        courseId={id}
+      />
     </div>
   )
 }
