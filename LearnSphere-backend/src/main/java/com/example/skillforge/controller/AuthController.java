@@ -88,6 +88,28 @@ public class AuthController {
     }
 
     /**
+     * Verify OTP
+     * POST /api/auth/verify-otp
+     */
+    @PostMapping("/verify-otp")
+    public ResponseEntity<ApiResponse<String>> verifyOtp(
+            @Valid @RequestBody com.example.skillforge.dto.request.VerifyOtpRequest request) {
+        authService.verifyAccount(request.getEmail(), request.getCode());
+        return ResponseEntity.ok(ApiResponse.success("Account verified successfully", null));
+    }
+
+    /**
+     * Resend OTP
+     * POST /api/auth/resend-otp
+     */
+    @PostMapping("/resend-otp")
+    public ResponseEntity<ApiResponse<String>> resendOtp(
+            @Valid @RequestBody com.example.skillforge.dto.request.ResendOtpRequest request) {
+        authService.resendVerificationCode(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success("Verification code resent", null));
+    }
+
+    /**
      * Health check endpoint
      * GET /api/auth/health
      */

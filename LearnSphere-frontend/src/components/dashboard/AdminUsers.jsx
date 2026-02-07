@@ -368,9 +368,13 @@ const AdminUsers = () => {
                                                 <span className="px-2 inline-flex items-center gap-1 text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                                                     <Ban size={12} /> Blocked
                                                 </span>
-                                            ) : (
+                                            ) : user.isVerified ? (
                                                 <span className="px-2 inline-flex items-center gap-1 text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                                                     <CheckCircle size={12} /> Active
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 inline-flex items-center gap-1 text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                                    <AlertTriangle size={12} /> Unverified
                                                 </span>
                                             )}
                                         </td>

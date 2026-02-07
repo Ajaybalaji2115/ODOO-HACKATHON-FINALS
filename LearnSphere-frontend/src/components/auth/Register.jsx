@@ -138,7 +138,7 @@ const Register = () => {
 
     const result = await dispatch(register(formData))
     if (result.type === 'auth/register/fulfilled') {
-      navigate('/dashboard')
+      navigate(`/verify-otp?email=${formData.email}`)
     }
   }
 

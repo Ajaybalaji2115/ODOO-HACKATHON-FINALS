@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface ReviewRepository extends JpaRepository<Review, Long> {
     List<Review> findByCourseIdOrderByCreatedAtDesc(Long courseId);
     Optional<Review> findByStudentIdAndCourseId(Long studentId, Long courseId);
+    void deleteByUserId(Long userId);
+    void deleteByStudentId(Long studentId);
 }

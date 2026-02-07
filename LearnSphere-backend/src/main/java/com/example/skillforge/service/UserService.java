@@ -22,6 +22,11 @@ public class UserService {
     private final com.example.skillforge.repository.CertificateRepository certificateRepository;
     private final ProgressService progressService;
     private final EmailService emailService;
+    private final com.example.skillforge.repository.PermanentlyDeletedUserRepository permanentlyDeletedUserRepository;
+    private final com.example.skillforge.repository.ReviewRepository reviewRepository;
+    private final com.example.skillforge.repository.EnrollmentRepository enrollmentRepository;
+    private final com.example.skillforge.repository.UserActivityRepository userActivityRepository;
+    private final com.example.skillforge.repository.CourseRepository courseRepository;
 
     public UserResponse getUserById(Long id) {
         User user = userRepository.findById(id)
@@ -113,20 +118,42 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Capture email before delete for notification
+        // Capture email before delete for notification and blacklisting
         String userEmail = user.getEmail();
         String userName = user.getName();
 
-        // Manual Cleanup for Student specific orphaned records
+        // Save to Blacklist
+        com.example.skillforge.model.entity.PermanentlyDeletedUser blacklistedUser = new com.example.skillforge.model.entity.PermanentlyDeletedUser();
+        blacklistedUser.setEmail(userEmail);
+        blacklistedUser.setReason(reason);
+        permanentlyDeletedUserRepository.save(blacklistedUser);
+
+        // Delete User Activities
+        userActivityRepository.deleteByUser_Id(user.getId());
+
+        // Delete Reviews
+        reviewRepository.deleteByUserId(user.getId());
+
+        // Manual Cleanup based on Role
         if (user.getRole() == com.example.skillforge.model.enums.Role.STUDENT && user.getStudent() != null) {
             Long studentId = user.getStudent().getId();
+            
+            // Delete Reviews by Student
+            reviewRepository.deleteByStudentId(studentId);
+            
+            // Delete Enrollments
+            enrollmentRepository.deleteByStudent_Id(studentId);
+
             // Delete Topic Progress
             topicProgressRepository.deleteByStudentId(studentId);
             // Delete Quiz Attempts
             quizAttemptRepository.deleteByStudentId(studentId);
-            // Delete Certificates (Note: Certificate maps student_id to User ID, so we pass
-            // user.getId())
+            // Delete Certificates
             certificateRepository.deleteByStudentId(user.getId());
+        } else if (user.getRole() == com.example.skillforge.model.enums.Role.INSTRUCTOR && user.getInstructor() != null) {
+            Long instructorId = user.getInstructor().getId();
+            // Delete Courses
+            courseRepository.deleteByInstructor_Id(instructorId);
         }
 
         userRepository.delete(user);
@@ -177,6 +204,7 @@ public class UserService {
                 .isBlocked(user.isBlocked())
                 .blockReason(user.getBlockReason())
                 .blockExpiry(user.getBlockExpiry())
+                .isVerified(user.isVerified())
                 .build();
     }
 

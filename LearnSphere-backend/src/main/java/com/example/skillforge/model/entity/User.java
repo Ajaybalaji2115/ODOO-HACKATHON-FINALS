@@ -47,6 +47,12 @@ public class User {
     private String resetToken;
     private LocalDateTime resetTokenExpiry;
 
+    // OTP Verification
+    @Column(nullable = false)
+    private boolean isVerified = false; // Default to false
+    private String verificationCode;
+    private LocalDateTime verificationCodeExpiry;
+
     // ACCOUNT STATUS
     private boolean isBlocked = false;
     private String blockReason;

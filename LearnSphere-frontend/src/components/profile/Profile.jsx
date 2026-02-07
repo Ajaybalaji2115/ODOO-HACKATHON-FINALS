@@ -3,11 +3,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
     Camera, Mail, Phone, User, Save, Trash2,
     CheckCircle, Loader2, Award, Shield, Bell,
-    Calendar, Clock, Edit2, Flame, Image as ImageIcon
+    Calendar, Clock, Edit2, Flame, Image as ImageIcon, MessageCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { profileService } from '../../services/profileService';
+import instructorService from '../../services/instructorService';
 import { enrollmentService } from '../../services/enrollmentService';
 import api from '../../services/api'; // For certificate generation
 import { updateUser } from '../../store/slices/authSlice';
@@ -297,7 +298,37 @@ const Profile = () => {
     // Modal States
     const [showBannerHintModal, setShowBannerHintModal] = useState(false);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+    const [showContactAdminModal, setShowContactAdminModal] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null); // 'profile' or 'banner'
+
+    // Contact Admin State
+    const [contactSubject, setContactSubject] = useState('');
+    const [contactMessage, setContactMessage] = useState('');
+    const [sendingMessage, setSendingMessage] = useState(false);
+
+    const handleContactAdmin = async () => {
+        if (!contactSubject.trim() || !contactMessage.trim()) {
+            toast.error("Please fill in both subject and message");
+            return;
+        }
+
+        try {
+            setSendingMessage(true);
+            await instructorService.contactAdmin({
+                subject: contactSubject,
+                message: contactMessage
+            });
+            toast.success("Message sent to Admin successfully!");
+            setShowContactAdminModal(false);
+            setContactSubject('');
+            setContactMessage('');
+        } catch (error) {
+            console.error("Failed to send message", error);
+            toast.error("Failed to send message to Admin.");
+        } finally {
+            setSendingMessage(false);
+        }
+    };
 
     const [formData, setFormData] = useState({
         name: '',
@@ -598,6 +629,50 @@ const Profile = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 relative">
 
             {/* MODALS */}
+            {/* Contact Admin Modal */}
+            <Modal
+                isOpen={showContactAdminModal}
+                onClose={() => setShowContactAdminModal(false)}
+                title="Contact Administrator"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                        <input
+                            type="text"
+                            value={contactSubject}
+                            onChange={(e) => setContactSubject(e.target.value)}
+                            placeholder="Brief subject of your query"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                        <textarea
+                            value={contactMessage}
+                            onChange={(e) => setContactMessage(e.target.value)}
+                            placeholder="Type your message here..."
+                            rows={5}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="outline" onClick={() => setShowContactAdminModal(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleContactAdmin}
+                            disabled={sendingMessage}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            {sendingMessage ? 'Sending...' : 'Send Message'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
             <Modal
                 isOpen={showBannerHintModal}
                 onClose={() => setShowBannerHintModal(false)}
@@ -872,6 +947,15 @@ const Profile = () => {
                                 icon={BookOpen}
                                 label="My Learning"
                             />
+                        )}
+                        {formData.role === 'INSTRUCTOR' && (
+                            <button
+                                onClick={() => setShowContactAdminModal(true)}
+                                className="flex items-center space-x-3 px-5 py-3 rounded-xl font-medium text-sm transition-all duration-200 w-full text-left text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                            >
+                                <MessageCircle size={18} />
+                                <span>Contact Admin</span>
+                            </button>
                         )}
                         <TabButton
                             active={activeTab === 'security'}

@@ -46,6 +46,7 @@ public class AuthService {
     private final UserDetailsService userDetailsService;
     private final StudentRepository studentRepository;
     private final EmailService emailService;
+    private final com.example.skillforge.repository.PermanentlyDeletedUserRepository permanentlyDeletedUserRepository;
     // Inject UserActivityService
     private final UserActivityService userActivityService;
 
@@ -62,7 +63,16 @@ public class AuthService {
         return createNewUser(request);
     }
 
+    private String generateVerificationCode() {
+        // Generate 6 digit code
+        return String.valueOf(new java.util.Random().nextInt(900000) + 100000);
+    }
+
     private AuthResponse createNewUser(RegisterRequest request) {
+        if (permanentlyDeletedUserRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("This email is permanently banned from the platform.");
+        }
+
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already exists");
         }
@@ -76,6 +86,12 @@ public class AuthService {
         user.setPhone(request.getPhone());
         user.setBio(request.getBio());
         user.setIsActive(true);
+        
+        // OTP Setup
+        String otp = generateVerificationCode();
+        user.setVerificationCode(otp);
+        user.setVerificationCodeExpiry(java.time.LocalDateTime.now().plusMinutes(15));
+        user.setVerified(false);
 
         // Create role-specific profile with proper mapping
         if (request.getRole() == Role.STUDENT) {
@@ -92,33 +108,17 @@ public class AuthService {
         // Save user (cascade will save Student/Instructor)
         user = userRepository.save(user);
 
-        // Generate tokens (optional for admin creation, but good for response)
-        // If Admin creates user, maybe return user details without token?
-        // But reusing AuthResponse is fine.
-
-        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String accessToken = jwtService.generateToken(userDetails);
-        String refreshToken = jwtService.generateRefreshToken(userDetails);
-
-        // Fetch student to get the generated ID
-        Long studentId = null;
-        if (user.getRole() == Role.STUDENT) {
-            Student student = studentRepository.findByUserId(user.getId()).orElse(null);
-            if (student != null) {
-                studentId = student.getId();
-            }
-        }
-
-        log.info("User registered/created successfully: {} with role {}", user.getEmail(), user.getRole());
+        // Send OTP Email
+        emailService.sendVerificationEmail(user.getEmail(), user.getName(), otp);
+        
+        log.info("User registered. OTP sent to: {}", user.getEmail());
 
         return AuthResponse.builder()
-                .token(accessToken)
-                .refreshToken(refreshToken)
                 .userId(user.getId())
-                .studentId(studentId)
                 .name(user.getName())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .message("Account created. Please verify your email.") 
                 .build();
     }
 
@@ -133,6 +133,31 @@ public class AuthService {
                         log.error("User not found with email: {}", request.getEmail());
                         return new RuntimeException("User not found with email: " + request.getEmail());
                     });
+            
+            // Check Verification
+            // Check Verification
+            if (!user.isVerified()) {
+                // Check if code is expired - if so, resend it automatically
+                if (user.getVerificationCodeExpiry() == null || 
+                    user.getVerificationCodeExpiry().isBefore(java.time.LocalDateTime.now())) {
+                    
+                    String otp = generateVerificationCode();
+                    user.setVerificationCode(otp);
+                    user.setVerificationCodeExpiry(java.time.LocalDateTime.now().plusMinutes(15));
+                    userRepository.save(user); // Validate this save doesn't break transaction
+                    
+                    try {
+                        emailService.sendVerificationEmail(user.getEmail(), user.getName(), otp);
+                        log.info("Expired OTP regenerated and sent for user: {}", user.getEmail());
+                        throw new RuntimeException("Account not verified. A new verification code has been sent to your email.");
+                    } catch (Exception e) {
+                        log.error("Failed to send OTP", e);
+                         throw new RuntimeException("Account not verified. Failed to resend verification code.");
+                    }
+                }
+                
+                throw new RuntimeException("Account not verified. Please verify your email.");
+            }
 
             log.info("User found: {}, attempting authentication", user.getEmail());
 
@@ -204,6 +229,11 @@ public class AuthService {
             User user = userRepository.findByEmail(email).orElse(null);
 
             if (user == null) {
+                // Check blacklist before creating new user
+                if (permanentlyDeletedUserRepository.existsByEmail(email)) {
+                    throw new RuntimeException("This email is permanently banned from the platform.");
+                }
+
                 // Create new user
                 user = new User();
                 user.setEmail(email);
@@ -212,6 +242,7 @@ public class AuthService {
                 user.setRole(Role.STUDENT);
                 user.setProfileImage(picture);
                 user.setIsActive(true);
+                user.setVerified(true); // Google Login is auto-verified
 
                 // Create student profile
                 Student student = new Student();
@@ -220,6 +251,12 @@ public class AuthService {
 
                 user = userRepository.save(user);
                 log.info("New user created via Google: {}", email);
+            } else {
+                 // Ensure verified if they subsequently login with Google
+                 if (!user.isVerified()) {
+                     user.setVerified(true);
+                     userRepository.save(user);
+                 }
             }
 
             // Generate tokens
@@ -252,6 +289,44 @@ public class AuthService {
             log.error("Error verifying Google token", e);
             throw new RuntimeException("Failed to verify Google token");
         }
+    }
+    
+    public void verifyAccount(String email, String code) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.isVerified()) {
+             throw new RuntimeException("Account already verified");
+        }
+
+        if (user.getVerificationCode() == null || !user.getVerificationCode().equals(code)) {
+            throw new RuntimeException("Invalid verification code");
+        }
+
+        if (user.getVerificationCodeExpiry().isBefore(java.time.LocalDateTime.now())) {
+            throw new RuntimeException("Verification code expired");
+        }
+
+        user.setVerified(true);
+        user.setVerificationCode(null);
+        user.setVerificationCodeExpiry(null);
+        userRepository.save(user);
+    }
+    
+    public void resendVerificationCode(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (user.isVerified()) {
+            throw new RuntimeException("Account already verified");
+        }
+        
+        String otp = generateVerificationCode();
+        user.setVerificationCode(otp);
+        user.setVerificationCodeExpiry(java.time.LocalDateTime.now().plusMinutes(15));
+        userRepository.save(user);
+        
+        emailService.sendVerificationEmail(user.getEmail(), user.getName(), otp);
     }
 
     /** \n * Refresh access token using valid refresh token\n */
@@ -323,18 +398,6 @@ public class AuthService {
                         "</html>",
                 user.getName(), resetLink);
 
-        // Send email via EmailService (Assuming EmailService is injected via
-        // @RequiredArgsConstructor)
-        // Wait, I need to add EmailService dependency to this class first!
-        // I will do that in a separate edit or handle it here if I check imports.
-        // Since I can't see the imports right now in this chunk, I'll rely on a second
-        // edit to add the field.
-        // Actually, I should probably add the field and imports first.
-        // But for this tool call, I'll just add the methods and then fix the
-        // dependencies.
-
-        // I'll add the field in the NEXT tool call or use multi_replace.
-        // Let's assume emailService is available.
         emailService.sendSimpleMessage(email, "LearnSphere-Platform - Password Reset Request", emailContent);
 
         log.info("Password reset email sent to: {}", email);

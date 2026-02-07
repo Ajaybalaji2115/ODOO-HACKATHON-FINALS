@@ -60,9 +60,9 @@ public class SecurityConfig {
                         .permitAll()
 
                         .requestMatchers("/api/materials/view-pdf/**").permitAll() // ✅ Allow PDF viewing
+                        .requestMatchers("/api/test/**").permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/materials/link").hasAnyAuthority("ROLE_INSTRUCTOR", "ROLE_ADMIN")
-                        .requestMatchers("/api/instructor/**").hasAuthority("ROLE_INSTRUCTOR")
                         .requestMatchers("/api/quizzes/**")
                         .hasAnyAuthority("ROLE_STUDENT", "ROLE_INSTRUCTOR", "ROLE_ADMIN")
 

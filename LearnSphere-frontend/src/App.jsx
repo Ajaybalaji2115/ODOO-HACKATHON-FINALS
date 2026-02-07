@@ -12,6 +12,7 @@ import LandingPage from './components/pages/LandingPage'
 import Login from './components/auth/Login'
 import ForgotPassword from './components/auth/ForgotPassword'
 import ResetPassword from './components/auth/ResetPassword'
+import VerifyOtp from './components/auth/VerifyOtp' // Import VerifyOtp
 import CertificateVerify from './components/certificate/CertificateVerify'
 
 import Register from './components/auth/Register'
@@ -58,7 +59,7 @@ function App() {
   // - Auth Pages: focused entry points
   // - Course Sub-pages (Detail, Create, Edit): maximizes workspace, avoids accidental exit
   // - Verification: clean, standalone proof page
-  const hideFooterPrefixes = ['/quiz/play', '/quiz/intro', '/login', '/register', '/forgot-password', '/reset-password', '/verify']
+  const hideFooterPrefixes = ['/quiz/play', '/quiz/intro', '/login', '/register', '/forgot-password', '/reset-password', '/verify', '/verify-otp']
   let shouldHideFooter = hideFooterPrefixes.some(prefix => location.pathname.startsWith(prefix))
 
   // Also hide on ALL course sub-pages (Create, Edit, Detail)
@@ -96,6 +97,10 @@ function App() {
           <Route
             path="/reset-password"
             element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/dashboard" />}
+          />
+          <Route
+            path="/verify-otp"
+            element={!isAuthenticated ? <VerifyOtp /> : <Navigate to="/dashboard" />}
           />
 
           {/* Certificate Verification (Public) */}

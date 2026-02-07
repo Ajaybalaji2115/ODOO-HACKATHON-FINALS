@@ -142,6 +142,8 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     
     Long countByInstructorIdAndIsPublished(Long instructorId, Boolean isPublished);
 
+    void deleteByInstructor_Id(Long instructorId);
+
     @Query("SELECT c FROM Course c WHERE c.isPublished = true")
     List<Course> findAllPublishedCourses();
 

@@ -15,7 +15,10 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/instructor")
+@lombok.RequiredArgsConstructor
 public class InstructorController {
+
+    private final com.example.skillforge.service.EmailService emailService;
 
     /**
      * Get instructor dashboard data
@@ -66,5 +69,20 @@ public class InstructorController {
         data.put("averageRating", 4.6);
         
         return ResponseEntity.ok(ApiResponse.success("Instructor analytics", data));
+    }
+    /**
+     * Contact Admin
+     * Endpoint for instructor to send message to admin
+     */
+    @PostMapping("/contact-admin")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<ApiResponse<String>> contactAdmin(@RequestBody com.example.skillforge.dto.request.ContactAdminRequest request, Authentication authentication) {
+        String instructorEmail = authentication.getName();
+        // Ideally fetch Name from DB, but Email is sufficient for now or we can use a helper
+        // Since we don't have easy access to User object here without Service, we'll just use Email as name or "Instructor"
+        
+        emailService.sendContactAdminEmail(instructorEmail, "Instructor", request.getSubject(), request.getMessage());
+        
+        return ResponseEntity.ok(ApiResponse.success("Message sent to admin successfully", null));
     }
 }

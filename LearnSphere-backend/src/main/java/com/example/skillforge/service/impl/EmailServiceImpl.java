@@ -30,14 +30,14 @@ public class EmailServiceImpl implements EmailService {
             MimeMessage message = emailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom(fromEmail);
+            helper.setFrom(fromEmail, "LearnSphereSystem");
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(text, true); // true = html
 
             emailSender.send(message);
             log.info("Email sent successfully to: {}", to);
-        } catch (MessagingException e) {
+        } catch (MessagingException | java.io.UnsupportedEncodingException e) {
             log.error("Failed to send email to {}", to, e);
             throw new RuntimeException("Failed to send email", e);
         }
@@ -48,7 +48,7 @@ public class EmailServiceImpl implements EmailService {
             String instructorName) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
+            message.setFrom("LearnSphereSystem <" + fromEmail + ">");
             message.setTo(studentEmail);
             message.setSubject("Welcome to " + courseTitle + "!");
 
@@ -82,7 +82,7 @@ public class EmailServiceImpl implements EmailService {
             String instructorName, String subject, String message) {
         try {
             SimpleMailMessage mailMessage = new SimpleMailMessage();
-            mailMessage.setFrom(fromEmail);
+            mailMessage.setFrom("LearnSphereSystem <" + fromEmail + ">");
             mailMessage.setTo(studentEmail);
             mailMessage.setSubject(subject);
 
@@ -106,6 +106,62 @@ public class EmailServiceImpl implements EmailService {
         } catch (Exception e) {
             log.error("Failed to send announcement to {}: {}", studentEmail, e.getMessage());
             // Don't throw exception - continue sending to other students
+        }
+    }
+    @Override
+    public void sendVerificationEmail(String to, String name, String code) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom("LearnSphereSystem <" + fromEmail + ">");
+            message.setTo(to);
+            message.setSubject("Verify Your Account - LearnSphere-Platform");
+            
+            String emailBody = String.format(
+                "Dear %s,\n\n" +
+                "Thank you for registering with LearnSphere-Platform. Please use the verification code below to activate your account:\n\n" +
+                "VERIFICATION CODE: %s\n\n" +
+                "This code will expire in 15 minutes.\n\n" +
+                "If you did not create an account, please ignore this email.\n\n" +
+                "Best regards,\n" +
+                "LearnSphere Team",
+                name, code
+            );
+            
+            message.setText(emailBody);
+            emailSender.send(message);
+            log.info("Verification email sent to: {}", to);
+        } catch (Exception e) {
+            log.error("Failed to send verification email to {}: {}", to, e.getMessage());
+            throw new RuntimeException("Failed to send verification email");
+        }
+    }
+
+    @Override
+    public void sendContactAdminEmail(String instructorEmail, String instructorName, String subject, String messageContent) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom("LearnSphereSystem <" + fromEmail + ">");
+            // Hardcoded Admin Email for MVP
+            message.setTo("selvaraj06061974@gmail.com"); 
+            message.setSubject("Instructor Query: " + subject);
+            
+            String emailBody = String.format(
+                "Dear Admin,\n\n" +
+                "You have received a new message from an Instructor.\n\n" +
+                "Instructor: %s (%s)\n\n" +
+                "Subject: %s\n\n" +
+                "Message:\n%s\n\n" +
+                "---\n" +
+                "LearnSphere System",
+                instructorName, instructorEmail, subject, messageContent
+            );
+            
+            message.setText(emailBody);
+            emailSender.send(message);
+            log.info("Contact Admin email sent from: {}", instructorEmail);
+        } catch (Exception e) {
+            log.error("Failed to send contact admin email from {}: {}", instructorEmail, e.getMessage());
+            throw new RuntimeException("Failed to send email to admin");
         }
     }
 }

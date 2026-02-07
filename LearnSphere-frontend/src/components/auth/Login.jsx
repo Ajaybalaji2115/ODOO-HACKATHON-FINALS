@@ -56,6 +56,10 @@ const Login = () => {
     const result = await dispatch(login(formData))
     if (result.type === 'auth/login/fulfilled') {
       navigate(redirectUrl)
+    } else if (result.type === 'auth/login/rejected') {
+      if (result.payload && result.payload.includes('not verified')) {
+        navigate(`/verify-otp?email=${formData.email}`)
+      }
     }
   }
 

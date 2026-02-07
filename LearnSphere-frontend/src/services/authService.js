@@ -19,6 +19,22 @@ export const authService = {
   },
 
   /**
+   * Verify OTP
+   */
+  async verifyOtp(email, code) {
+    const response = await api.post('/auth/verify-otp', { email, code })
+    return response.data
+  },
+
+  /**
+   * Resend OTP
+   */
+  async resendOtp(email) {
+    const response = await api.post('/auth/resend-otp', { email })
+    return response.data
+  },
+
+  /**
    * Google Login
    */
   async googleLogin(token) {

@@ -126,22 +126,25 @@ export const register = createAsyncThunk(
 
       // Backend returns ApiResponse wrapper: { success, message, data }
       const authData = response.data || response
-      const { token, refreshToken, userId, studentId, name, email, role, profileImage } = authData
+      const { token, refreshToken, userId, studentId, name, email, role, profileImage, message } = authData
 
-      localStorage.setItem('token', token)
-      if (refreshToken) {
-        localStorage.setItem('refreshToken', refreshToken)
+      if (token) {
+        localStorage.setItem('token', token)
+        if (refreshToken) {
+          localStorage.setItem('refreshToken', refreshToken)
+        }
+        localStorage.setItem(
+          'user',
+          JSON.stringify({ userId, studentId, name, email, role, profileImage })
+        )
       }
-      localStorage.setItem(
-        'user',
-        JSON.stringify({ userId, studentId, name, email, role, profileImage })
-      )
 
-      toast.success('Registration successful!')
+      toast.success(message || 'Registration successful! Please verify your email.')
       return {
         token,
         refreshToken,
-        user: { userId, studentId, name, email, role, profileImage }
+        user: { userId, studentId, name, email, role, profileImage },
+        message
       }
 
     } catch (error) {
@@ -236,10 +239,13 @@ const authSlice = createSlice({
       })
       .addCase(register.fulfilled, (state, action) => {
         state.loading = false
-        state.isAuthenticated = true
-        state.user = action.payload.user
-        state.token = action.payload.token
-        state.refreshToken = action.payload.refreshToken
+        // Only set authenticated if token is present (it won't be for OTP flow)
+        if (action.payload.token) {
+          state.isAuthenticated = true
+          state.user = action.payload.user
+          state.token = action.payload.token
+          state.refreshToken = action.payload.refreshToken
+        }
         state.error = null
       })
       .addCase(register.rejected, (state, action) => {

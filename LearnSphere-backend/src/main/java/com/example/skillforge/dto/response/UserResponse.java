@@ -29,4 +29,7 @@ public class UserResponse {
     private Boolean isBlocked;
     private String blockReason;
     private LocalDateTime blockExpiry;
+    
+    // Verification Status
+    private Boolean isVerified;
 }
