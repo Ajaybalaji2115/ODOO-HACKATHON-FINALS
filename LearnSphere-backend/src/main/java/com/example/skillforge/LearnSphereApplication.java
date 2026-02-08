@@ -1,6 +1,3 @@
-// Author: Gowtham B
-// LearnSphere-Platform – AI-Driven Adaptive Learning and Exam Generator
-// Individual Portfolio Project
 
 package com.example.skillforge;
 
