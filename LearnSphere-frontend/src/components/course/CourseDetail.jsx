@@ -1,7 +1,9 @@
 // src/components/course/CourseDetail.jsx
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
+import { motion, AnimatePresence } from 'framer-motion'
+import gsap from 'gsap'
 import { courseService } from '../../services/courseService'
 import { topicService } from '../../services/topicService'
 import { materialService } from '../../services/materialService'
@@ -27,6 +29,9 @@ import CertificateDownload from '../certificate/CertificateDownload'
 import ConfirmModal from '../common/ConfirmModal'
 import ReviewSection from './ReviewSection'
 import CourseReviewModal from './CourseReviewModal'
+import AnimatedBackground from '../common/AnimatedBackground'
+import CircularProgress from '../common/CircularProgress'
+import { fadeInUp, fadeIn, scaleIn, staggerContainer, slideInLeft, slideInRight } from '../../utils/animations'
 
 
 const CourseDetail = () => {
@@ -122,20 +127,24 @@ const CourseDetail = () => {
   const [completedMaterialIds, setCompletedMaterialIds] = useState(new Set());
   const [topicQuizzes, setTopicQuizzes] = useState({}); // Store quizzes per topic
 
+  const fetchMaterialProgress = async () => {
+    if (user?.studentId) {
+      try {
+        const m = await import('../../services/materialProgressService');
+        const res = await m.materialProgressService.getCompletedMaterials(user.studentId);
+        if (res.data) {
+          setCompletedMaterialIds(new Set(res.data));
+        }
+      } catch (err) {
+        console.error("Failed to fetch material progress", err);
+      }
+    }
+  };
+
   useEffect(() => {
     if (user?.role === 'STUDENT' && user.studentId && courseId) {
       fetchTopicProgress();
-
-      // Fetch completed materials
-      import('../../services/materialProgressService').then(m => {
-        m.materialProgressService.getCompletedMaterials(user.studentId)
-          .then(res => {
-            if (res.data) {
-              setCompletedMaterialIds(new Set(res.data));
-            }
-          })
-          .catch(err => console.error("Failed to fetch material progress", err));
-      });
+      fetchMaterialProgress();
     }
   }, [user, courseId]);
 
@@ -453,6 +462,21 @@ const CourseDetail = () => {
         ...prev,
         [topicId]: combinedMaterials.length + quizzes.length
       }))
+
+      // Update topicQuizzes state so the UI knows to render the quiz section
+      if (quizzes.length > 0) {
+        setTopicQuizzes(prev => ({
+          ...prev,
+          [topicId]: quizzes[0] // Assuming 1 quiz per topic
+        }))
+      } else {
+        // Clear if no quiz (e.g. if deleted)
+        setTopicQuizzes(prev => {
+          const newState = { ...prev };
+          delete newState[topicId];
+          return newState;
+        })
+      }
     } catch (error) {
       console.error('Error fetching materials:', error)
       toast.error('Failed to load materials')
@@ -589,7 +613,7 @@ const CourseDetail = () => {
   }
 
   // Handler to check enrollment before accessing material
-  const handleMaterialClick = (material, topicId) => {
+  const handleMaterialClick = async (material, topicId) => {
     if (!isStudent) {
       // Instructors can always access
       setSelectedMaterial({ ...material, topicId })
@@ -602,6 +626,39 @@ const CourseDetail = () => {
         icon: '🔒'
       })
       return
+    }
+
+    // Special handling for LINK type: Open directly and mark complete
+    if (material.materialType === 'LINK') {
+      const url = material.externalUrl || material.link;
+      if (url) {
+        window.open(url, '_blank');
+
+        // Mark as complete if not already
+        if (!completedMaterialIds.has(material.id)) {
+          try {
+            // Optimistic update
+            setCompletedMaterialIds(prev => {
+              const newSet = new Set(prev);
+              newSet.add(material.id);
+              return newSet;
+            });
+
+            if (user?.studentId) {
+              const m = await import('../../services/materialProgressService');
+              await m.materialProgressService.markMaterialCompleted(user.studentId, material.id);
+              toast.success("Marked as completed");
+              fetchMaterialProgress(); // Sync completed items
+              loadProgress(courseId, topics); // Sync progress bar
+            }
+          } catch (err) {
+            console.error("Failed to auto-complete link:", err);
+          }
+        }
+      } else {
+        toast.error("Invalid link URL");
+      }
+      return; // Skip opening the modal
     }
 
     setSelectedMaterial({ ...material, topicId })
@@ -718,7 +775,7 @@ const CourseDetail = () => {
         title: materialForm.title,
         description: materialForm.description,
         responsible: materialForm.responsible,
-        durationMinutes: materialForm.durationMinutes ? parseInt(materialForm.durationMinutes) : null,
+        durationMinutes: (materialForm.durationMinutes !== '' && materialForm.durationMinutes !== null && materialForm.durationMinutes !== undefined) ? parseInt(materialForm.durationMinutes) : 0,
         allowDownload: materialForm.allowDownload
       }
 
@@ -728,7 +785,7 @@ const CourseDetail = () => {
         formData.append('title', commonData.title)
         formData.append('description', commonData.description || '')
         if (commonData.responsible) formData.append('responsible', commonData.responsible)
-        if (commonData.durationMinutes) formData.append('durationMinutes', commonData.durationMinutes)
+        if (commonData.durationMinutes !== null && commonData.durationMinutes !== undefined) formData.append('durationMinutes', commonData.durationMinutes)
         formData.append('allowDownload', commonData.allowDownload)
 
         // If type changed or file/link updated
@@ -780,7 +837,7 @@ const CourseDetail = () => {
           formData.append('title', commonData.title)
           formData.append('description', commonData.description || '')
           if (commonData.responsible) formData.append('responsible', commonData.responsible)
-          if (commonData.durationMinutes) formData.append('durationMinutes', commonData.durationMinutes)
+          if (commonData.durationMinutes !== null && commonData.durationMinutes !== undefined) formData.append('durationMinutes', commonData.durationMinutes)
           formData.append('allowDownload', commonData.allowDownload)
 
           responseMaterial = await materialService.uploadMaterial(formData)
@@ -806,7 +863,14 @@ const CourseDetail = () => {
       }
 
       closeMaterialModal()
-      await fetchCourseData() // Refresh to see updates
+
+      // Refresh materials for the specific topic to show updates immediately
+      const topicId = selectedTopicForMaterial || materialForm.topicId
+      if (topicId) {
+        await fetchMaterials(topicId)
+      }
+
+      await fetchCourseData() // Refresh course data as well
 
     } catch (error) {
       console.error('Material submit error:', error)
@@ -1216,450 +1280,561 @@ const CourseDetail = () => {
 
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Hero Section */}
-          <Card>
-            <div className="h-64 md:h-96 relative overflow-hidden">
-              {course.thumbnailUrl ? (
-                <img
-                  src={course.thumbnailUrl}
-                  alt={course.title}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = 'none'
-                    e.target.nextSibling.style.display = 'flex'
-                  }}
-                />
-              ) : null}
-              <div className="w-full h-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center" style={course.thumbnailUrl ? { display: 'none' } : {}}>
-                <BookOpen size={96} className="text-white opacity-80" />
-              </div>
-              {isEnrolled && (
-                <div className="absolute top-6 right-6 bg-green-500 text-white px-4 py-2 rounded-full font-medium flex items-center space-x-2">
-                  <CheckCircle size={20} />
-                  <span>Enrolled</span>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 md:p-8">
-              <div className="mb-4 flex items-center justify-between">
-                <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${course.difficultyLevel === 'BEGINNER' ? 'bg-green-100 text-green-800' :
-                  course.difficultyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                  {course.difficultyLevel}
-                </span>
-                {isInstructor && (
-                  <Button
-                    onClick={() => navigate(`/courses/edit/${id}`)}
-                    variant="secondary"
-                    size="sm"
-                    icon={Edit}
-                  >
-                    Edit Course
-                  </Button>
-                )}
-              </div>
-
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                {course.title}
-              </h1>
-
-
-              <p className="text-gray-600 text-lg mb-6">
-                {course.description || 'No description available.'}
-              </p>
-
-
-              {/* =================== PROGRESS BLOCK =================== */}
-              {isStudent && isEnrolled && courseProgress && (
-                <div className="bg-white border rounded-xl p-4 shadow-sm">
-                  <p className="text-sm text-gray-600">Your Progress</p>
-
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-xl font-bold">
-                      {courseProgress.percentage}%
-                    </span>
-
-                    <span className="text-sm text-gray-500">
-                      {courseProgress.completedTopics} / {courseProgress.totalTopics} topics
-                    </span>
-                  </div>
-
-
-                  <div className="mt-3 h-3 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-1000"
-                      style={{
-                        width: `${courseProgress.percentage}%`,
-                        backgroundColor: getProgressColor(courseProgress.percentage)
-                      }}
-                    />
-                  </div>
-
-                  {/* Certificate Download Section */}
-                  <CertificateDownload
-                    courseId={courseId}
-                    studentId={user.userId}
-                    isCompleted={courseProgress.percentage === 100}
+          {/* Hero Section - Enhanced with Animations */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={fadeIn}
+          >
+            <Card className="overflow-hidden">
+              {/* Animated Header Image with Gradient Overlay */}
+              <div className="h-64 md:h-96 relative overflow-hidden group">
+                <AnimatedBackground />
+                {course.thumbnailUrl ? (
+                  <motion.img
+                    src={course.thumbnailUrl}
+                    alt={course.title}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    initial={{ opacity: 0, scale: 1.1 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.8 }}
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                      e.target.nextSibling.style.display = 'flex'
+                    }}
                   />
-                </div>
-              )}
-
-
-              <div className="grid grid-cols-3 gap-4 mt-6 mb-6">
-                <div className="flex items-center space-x-2 text-gray-600">
-                  <Users size={20} />
-                  <span className="text-sm">{course.totalEnrollments || 0} students</span>
-                </div>
-                <div className="flex items-center space-x-2 text-gray-600">
-                  <Clock size={20} />
-                  <span className="text-sm">{course.duration || 0} minutes</span>
-                </div>
-                <div className="flex items-center space-x-2 text-gray-600">
-                  <FileText size={20} />
-                  <span className="text-sm">{topics.length} topics</span>
-                </div>
-              </div>
-
-              <div className="pt-6 border-t">
-                <p className="text-sm text-gray-600 mb-2">Instructor</p>
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 font-bold text-lg">
-                      {course.instructorName?.charAt(0) || 'I'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{course.instructorName}</p>
-                    <p className="text-sm text-gray-500">Course Instructor</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Topics & Materials */}
-          <Card className="p-6 md:p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Course Content</h2>
-              {isInstructor && (
-                <Button
-                  onClick={() => setShowTopicModal(true)}
-                  variant="primary"
-                  size="sm"
-                  icon={Plus}
+                ) : null}
+                <div
+                  className="w-full h-full bg-gradient-to-br from-violet-600 via-purple-600 to-pink-600 flex items-center justify-center"
+                  style={course.thumbnailUrl ? { display: 'none' } : {}}
                 >
-                  Add Topic
-                </Button>
-              )}
-            </div>
-
-            {topics.length === 0 ? (
-              <div className="text-center py-12">
-                <FileText size={48} className="mx-auto text-gray-400 mb-3" />
-                <p className="text-gray-600">No topics added yet</p>
-                {isInstructor && (
-                  <Button
-                    onClick={() => setShowTopicModal(true)}
-                    variant="primary"
-                    size="sm"
-                    className="mt-4"
+                  <motion.div
+                    animate={{
+                      rotate: [0, 5, -5, 0],
+                      scale: [1, 1.1, 1]
+                    }}
+                    transition={{
+                      duration: 4,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
                   >
-                    Add First Topic
-                  </Button>
+                    <BookOpen size={96} className="text-white opacity-90 drop-shadow-2xl" />
+                  </motion.div>
+                </div>
+
+                {/* Gradient Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+
+                {isEnrolled && (
+                  <motion.div
+                    className="absolute top-6 right-6 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-5 py-2.5 rounded-full font-semibold flex items-center space-x-2 shadow-lg backdrop-blur-sm"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <CheckCircle size={20} />
+                    <span>Enrolled</span>
+                  </motion.div>
                 )}
               </div>
-            ) : (
-              <div className="space-y-3">
-                {topics.map((topic, index) => {
-                  const topicMaterials = materials[topic.id] || []
-                  const materialCount = materialCounts[topic.id] ?? topic.materialsCount ?? 0
 
-                  return (
-                    <div key={topic.id} className="border border-gray-200 rounded-lg">
-                      <div
-                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                        onClick={() => toggleTopic(topic.id)}
+              {/* Course Info Section - Enhanced */}
+              <div className="p-6 md:p-8 bg-gradient-to-br from-white via-purple-50/30 to-pink-50/30">
+                <motion.div
+                  className="mb-4 flex items-center justify-between"
+                  variants={slideInLeft}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <span className={`px-5 py-2 rounded-full text-sm font-semibold shadow-md backdrop-blur-sm ${course.difficultyLevel === 'BEGINNER'
+                    ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200' :
+                    course.difficultyLevel === 'INTERMEDIATE'
+                      ? 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 border border-yellow-200' :
+                      'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200'
+                    }`}>
+                    {course.difficultyLevel}
+                  </span>
+                  {isInstructor && (
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Button
+                        onClick={() => navigate(`/courses/edit/${id}`)}
+                        variant="secondary"
+                        size="sm"
+                        icon={Edit}
+                        className="shadow-md hover:shadow-lg transition-shadow"
                       >
-                        <div className="flex items-center space-x-4 flex-1">
-                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <span className="text-blue-600 font-bold">{index + 1}</span>
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2">
-                              <h3 className="font-semibold text-gray-900">{topic.name}</h3>
+                        Edit Course
+                      </Button>
+                    </motion.div>
+                  )}
+                </motion.div>
 
-                            </div>
-                            <p className="text-sm text-gray-500">
-                              {materialCount} material{materialCount !== 1 ? 's' : ''}
-                            </p>
+                <motion.h1
+                  className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-gray-900 via-purple-900 to-pink-900 bg-clip-text text-transparent mb-4 leading-tight"
+                  variants={fadeInUp}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  {course.title}
+                </motion.h1>
+
+                <motion.p
+                  className="text-gray-700 text-lg mb-6 leading-relaxed"
+                  variants={fadeInUp}
+                  initial="hidden"
+                  animate="visible"
+                  transition={{ delay: 0.1 }}
+                >
+                  {course.description || 'No description available.'}
+                </motion.p>
+
+                {/* Enhanced Progress Block */}
+                {isStudent && isEnrolled && courseProgress && (
+                  <motion.div
+                    className="bg-gradient-to-br from-white to-purple-50 border-2 border-purple-100 rounded-2xl p-6 shadow-xl mb-6 relative overflow-hidden"
+                    variants={scaleIn}
+                    initial="hidden"
+                    animate="visible"
+                    transition={{ delay: 0.2 }}
+                  >
+                    {/* Decorative background */}
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-200/20 to-pink-200/20 rounded-full blur-3xl" />
+
+                    <div className="relative z-10">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="text-sm font-semibold text-purple-600 mb-1">Your Progress</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent">
+                              {courseProgress.percentage}%
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {courseProgress.completedTopics} / {courseProgress.totalTopics} topics
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          {isInstructor && (
-                            <>
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  console.log('Opening Modal for Topic:', topic.id)
-                                  setSelectedTopicForMaterial(topic.id)
-                                  setMaterialForm(prev => ({ ...prev, topicId: topic.id }))
-                                  setEditingMaterial(null)
-                                  setShowMaterialModal(true)
-                                }}
-                                variant="secondary"
-                                size="sm"
-                                icon={Plus}
-                              >
-                                Add Material
-                              </Button>
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDeleteTopic(topic.id)
-                                }}
-                                variant="danger"
-                                size="sm"
-                                icon={Trash2}
-                              />
-                            </>
-                          )}
-                          {completedTopicIds.has(topic.id) && (
-                            <span className="flex items-center text-green-600 text-xs font-bold bg-green-100 px-2 py-0.5 rounded-full mr-3">
-                              <CheckCircle size={12} className="mr-1" /> Completed
-                            </span>
-                          )}
-                          {expandedTopic === topic.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        </div>
+                        <CircularProgress percentage={courseProgress.percentage} size={100} strokeWidth={6} />
                       </div>
 
-                      {/* Materials Display */}
-                      {expandedTopic === topic.id && (
-                        <>
-                          <div className="border-t border-gray-200 p-4 bg-gray-50">
-                            {topic.description && (
-                              <p className="text-sm text-gray-600 mb-4">{topic.description}</p>
-                            )}
+                      {/* Animated Progress Bar */}
+                      <div className="relative h-4 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                        <motion.div
+                          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 shadow-lg"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${courseProgress.percentage}%` }}
+                          transition={{ duration: 1.5, ease: "easeOut" }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent" />
+                      </div>
 
-                            {topicMaterials.length === 0 ? (
-                              <p className="text-sm text-gray-500 text-center py-4">No materials added yet</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {topicMaterials.map((material) => {
-                                  const iconData = getMaterialIcon(material.materialType)
-                                  const isLocked = isStudent && !isEnrolled
-
-                                  return (
-                                    <div
-                                      key={material.id}
-                                      className={`relative flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 transition-colors ${isLocked ? 'opacity-60 cursor-not-allowed' : 'hover:border-purple-300 cursor-pointer'
-                                        }`}
-                                      onClick={() => handleMaterialClick(material, topic.id)}
-                                    >
-                                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                        {/* Completion Radio Button */}
-                                        {isStudent && isEnrolled && (
-                                          <div
-                                            onClick={(e) => {
-                                              if (material.materialType !== 'VIDEO') {
-                                                handleToggleMaterial(material.id, e);
-                                              }
-                                            }}
-                                            className={`cursor-pointer mr-1 transition-colors ${material.materialType === 'VIDEO'
-                                              ? (completedMaterialIds.has(material.id) ? "text-green-500 cursor-default" : "text-gray-300 cursor-default")
-                                              : "text-gray-400 hover:text-green-500"
-                                              }`}
-                                            title={
-                                              material.materialType === 'VIDEO'
-                                                ? (completedMaterialIds.has(material.id) ? "Completed" : "Watch video to complete")
-                                                : (completedMaterialIds.has(material.id) ? "Mark as incomplete" : "Mark as done")
-                                            }
-                                          >
-                                            {completedMaterialIds.has(material.id) ? (
-                                              <CheckCircle
-                                                size={24}
-                                                className="text-green-500 fill-green-100"
-                                              />
-                                            ) : (
-                                              <Circle
-                                                size={24}
-                                                className="text-gray-300 hover:text-green-500 transition-colors"
-                                              />
-                                            )}
-                                          </div>
-                                        )}
-
-                                        <div className={`${iconData.bg} p-2 rounded-lg relative flex-shrink-0`}>
-                                          <div className={iconData.color}>
-                                            {iconData.component}
-                                          </div>
-                                          {isLocked && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
-                                              <svg className="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                              </svg>
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2">
-                                            <p className="font-medium text-gray-900 truncate">{material.title}</p>
-                                            {isLocked && (
-                                              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full flex-shrink-0">🔒 Locked</span>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-                                            <span className="capitalize">{material.materialType.toLowerCase()}</span>
-                                            {material.durationMinutes && (
-                                              <>
-                                                <span>•</span>
-                                                <span>{material.durationMinutes} min</span>
-                                              </>
-                                            )}
-                                            {material.responsible && (
-                                              <>
-                                                <span>•</span>
-                                                <span className="truncate max-w-[100px]">{material.responsible}</span>
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {isInstructor && (
-                                        <div className="relative ml-2" onClick={(e) => e.stopPropagation()}>
-                                          <button
-                                            onClick={() => setActiveMenuId(activeMenuId === material.id ? null : material.id)}
-                                            className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
-                                          >
-                                            <MoreVertical size={18} />
-                                          </button>
-
-                                          {activeMenuId === material.id && (
-                                            <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                                              <button
-                                                onClick={() => handleEditMaterial(material, topic.id)}
-                                                className="w-full text-left px-4 py-2 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-2 transition-colors"
-                                              >
-                                                <Edit size={14} className="text-purple-600" /> Edit
-                                              </button>
-                                              <button
-                                                onClick={() => {
-                                                  handleDeleteMaterial(material.id, topic.id)
-                                                  setActiveMenuId(null)
-                                                }}
-                                                className="w-full text-left px-4 py-2 hover:bg-red-50 text-sm text-red-600 flex items-center gap-2 transition-colors"
-                                              >
-                                                <Trash2 size={14} /> Delete
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ===== NEW: Quiz Section (right under materials list) ===== */}
-                          <div className="p-4 border-t border-gray-200 bg-gradient-to-r from-purple-50 to-white">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                {/* Quiz Completion Radio Button */}
-                                {isStudent && isEnrolled && topicQuizzes[topic.id] && (
-                                  <div
-                                    onClick={(e) => handleToggleMaterial(topicQuizzes[topic.id].id, e)}
-                                    className="cursor-pointer mr-1 text-gray-400 hover:text-green-500 transition-colors"
-                                    title={completedMaterialIds.has(topicQuizzes[topic.id].id) ? "Mark as incomplete" : "Mark as done"}
-                                  >
-                                    <CheckCircle
-                                      size={24}
-                                      className={completedMaterialIds.has(topicQuizzes[topic.id].id) ? "text-green-500 fill-green-100" : "text-gray-300"}
-                                    />
-                                  </div>
-                                )}
-                                <div className="w-12 h-12 rounded-lg bg-purple-600 text-white flex items-center justify-center">
-                                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    <path d="M20 12a8 8 0 11-16 0 8 8 0 0116 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <h4 className="text-lg font-semibold text-gray-900">Quiz</h4>
-                                  <p className="text-sm text-gray-600">Test your understanding of this topic</p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center space-x-2">
-                                {isStudent && (
-                                  <Button
-                                    onClick={() => handleQuizClick(topic)}
-                                    variant={!isEnrolled ? "secondary" : "primary"}
-                                    size="sm"
-                                    icon={!isEnrolled ? undefined : Play}
-                                    disabled={!isEnrolled}
-                                    className={!isEnrolled ? "opacity-60 cursor-not-allowed" : ""}
-                                  >
-                                    {!isEnrolled ? '🔒 Locked' : 'Start Quiz'}
-                                  </Button>
-                                )}
-
-                                {isInstructor && (
-                                  <>
-                                    <Button
-                                      onClick={() => handleOpenGenerateModal(topic.id)}
-                                      variant="secondary"
-                                      size="sm"
-                                      className="bg-white border border-purple-300 text-purple-700 hover:bg-purple-50"
-                                    >
-                                      Generate
-                                    </Button>
-
-                                    <Button
-                                      onClick={() => handleOpenMCQUploadModal(topic.id)}
-                                      variant="secondary"
-                                      size="sm"
-                                      icon={Upload}
-                                      className="bg-white border border-blue-300 text-blue-700 hover:bg-blue-50"
-                                      title="Upload MCQ questions manually"
-                                    >
-                                      Upload MCQ
-                                    </Button>
-
-
-                                    <Button
-                                      onClick={() => handleViewQuiz(topic)}
-                                      variant="secondary"
-                                      size="sm"
-                                      icon={Eye}
-                                    >
-                                      View Quiz
-                                    </Button>
-
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Small hint line */}
-                            <p className="mt-3 text-xs text-gray-500">
-                              {isInstructor ? 'Generate a quiz using AI or view the latest saved quiz (read-only).' :
-                                isEnrolled ? 'Start the latest quiz for this topic. If no quiz exists ask your instructor to generate one.' :
-                                  '🔒 Enroll in this course to access quizzes and test your knowledge.'}
-                            </p>
-                          </div>
-                          {/* ===== end quiz section ===== */}
-                        </>
-                      )}
+                      {/* Certificate Download Section */}
+                      <div className="mt-4">
+                        <CertificateDownload
+                          courseId={courseId}
+                          studentId={user.userId}
+                          isCompleted={courseProgress.percentage === 100}
+                        />
+                      </div>
                     </div>
-                  )
-                })}
+                  </motion.div>
+                )}
+
+                {/* Course Stats - Enhanced */}
+                <motion.div
+                  className="grid grid-cols-3 gap-4 mt-6 mb-6"
+                  variants={staggerContainer}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  {[
+                    { icon: Users, label: `${course.totalEnrollments || 0} students`, color: 'from-blue-500 to-cyan-500' },
+                    { icon: Clock, label: `${course.duration || 0} minutes`, color: 'from-purple-500 to-pink-500' },
+                    { icon: FileText, label: `${topics.length} topics`, color: 'from-orange-500 to-red-500' }
+                  ].map((stat, index) => (
+                    <motion.div
+                      key={index}
+                      className="flex items-center space-x-3 p-3 rounded-xl bg-white shadow-md hover:shadow-lg transition-all duration-300 group cursor-pointer border border-gray-100"
+                      variants={fadeInUp}
+                      whileHover={{ y: -4, scale: 1.02 }}
+                    >
+                      <div className={`p-2 rounded-lg bg-gradient-to-br ${stat.color} shadow-md group-hover:shadow-lg transition-shadow`}>
+                        <stat.icon size={20} className="text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">{stat.label}</span>
+                    </motion.div>
+                  ))}
+                </motion.div>
+
+                {/* Instructor Section - Enhanced */}
+                <motion.div
+                  className="pt-6 border-t border-gray-200"
+                  variants={fadeInUp}
+                  initial="hidden"
+                  animate="visible"
+                  transition={{ delay: 0.3 }}
+                >
+                  <p className="text-sm font-semibold text-gray-600 mb-3">Course Instructor</p>
+                  <div className="flex items-center space-x-4 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100">
+                    <motion.div
+                      className="w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg"
+                      whileHover={{ scale: 1.1, rotate: 5 }}
+                      transition={{ type: "spring", stiffness: 300 }}
+                    >
+                      <span className="text-white font-bold text-xl">
+                        {course.instructorName?.charAt(0) || 'I'}
+                      </span>
+                    </motion.div>
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">{course.instructorName}</p>
+                      <p className="text-sm text-gray-600">Course Instructor</p>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
-            )}
-          </Card>
+            </Card>
+          </motion.div>
+
+          {/* Topics & Materials - Enhanced */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={fadeInUp}
+            transition={{ delay: 0.2 }}
+          >
+            <Card className="p-6 md:p-8 bg-gradient-to-br from-white to-gray-50/50">
+              <div className="flex items-center justify-between mb-6">
+                <motion.h2
+                  className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-purple-900 bg-clip-text text-transparent"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                >
+                  Course Content
+                </motion.h2>
+                {isInstructor && (
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      onClick={() => setShowTopicModal(true)}
+                      variant="primary"
+                      size="sm"
+                      icon={Plus}
+                      className="shadow-md hover:shadow-lg transition-shadow"
+                    >
+                      Add Topic
+                    </Button>
+                  </motion.div>
+                )}
+              </div>
+
+              {topics.length === 0 ? (
+                <motion.div
+                  className="text-center py-16"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                >
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
+                    <FileText size={48} className="text-purple-500" />
+                  </div>
+                  <p className="text-gray-600 text-lg mb-2">No topics added yet</p>
+                  <p className="text-gray-500 text-sm mb-4">Start building your course by adding the first topic</p>
+                  {isInstructor && (
+                    <Button
+                      onClick={() => setShowTopicModal(true)}
+                      variant="primary"
+                      size="sm"
+                      className="mt-4"
+                    >
+                      Add First Topic
+                    </Button>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  className="space-y-4"
+                  variants={staggerContainer}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  {topics.map((topic, index) => {
+                    const topicMaterials = materials[topic.id] || []
+                    const materialCount = materialCounts[topic.id] ?? topic.materialsCount ?? 0
+                    const isExpanded = expandedTopic === topic.id
+
+                    return (
+                      <motion.div
+                        key={topic.id}
+                        className="border-2 border-gray-200 rounded-2xl overflow-hidden bg-white shadow-md hover:shadow-xl transition-all duration-300"
+                        variants={fadeInUp}
+                        whileHover={{ y: -2 }}
+                      >
+                        {/* Topic Header */}
+                        <div
+                          className="flex items-center justify-between p-5 cursor-pointer bg-gradient-to-r from-white to-purple-50/30 hover:from-purple-50/50 hover:to-pink-50/50 transition-all duration-300"
+                          onClick={() => toggleTopic(topic.id)}
+                        >
+                          <div className="flex items-center space-x-4 flex-1">
+                            {/* Topic Number Badge */}
+                            <motion.div
+                              className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
+                              whileHover={{ scale: 1.1, rotate: 5 }}
+                              transition={{ type: "spring", stiffness: 300 }}
+                            >
+                              <span className="text-white font-bold text-lg">{index + 1}</span>
+                            </motion.div>
+
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3">
+                                <h3 className="font-bold text-gray-900 text-lg">{topic.name}</h3>
+                                {completedTopicIds.has(topic.id) && (
+                                  <motion.span
+                                    className="flex items-center text-green-600 text-xs font-bold bg-green-100 px-3 py-1 rounded-full border border-green-200"
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ type: "spring", stiffness: 500 }}
+                                  >
+                                    <CheckCircle size={14} className="mr-1" /> Completed
+                                  </motion.span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1 flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1">
+                                  <FileText size={14} />
+                                  {materialCount} material{materialCount !== 1 ? 's' : ''}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {isInstructor && (
+                              <>
+                                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      console.log('Opening Modal for Topic:', topic.id)
+                                      setSelectedTopicForMaterial(topic.id)
+                                      setMaterialForm(prev => ({ ...prev, topicId: topic.id }))
+                                      setEditingMaterial(null)
+                                      setShowMaterialModal(true)
+                                    }}
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={Plus}
+                                    className="shadow-sm hover:shadow-md transition-shadow"
+                                  >
+                                    Add Material
+                                  </Button>
+                                </motion.div>
+                                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteTopic(topic.id)
+                                    }}
+                                    variant="danger"
+                                    size="sm"
+                                    icon={Trash2}
+                                    className="shadow-sm hover:shadow-md transition-shadow"
+                                  />
+                                </motion.div>
+                              </>
+                            )}
+                            <motion.div
+                              animate={{ rotate: isExpanded ? 180 : 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="p-2 rounded-full hover:bg-purple-100 transition-colors"
+                            >
+                              <ChevronDown size={24} className="text-gray-600" />
+                            </motion.div>
+                          </div>
+                        </div>
+
+                        {/* Materials Display - Animated Collapse */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3, ease: "easeInOut" }}
+                            >
+                              <div className="border-t border-gray-200 p-5 bg-gradient-to-br from-gray-50 to-purple-50/20">
+                                {topic.description && (
+                                  <motion.p
+                                    className="text-sm text-gray-700 mb-4 p-3 bg-white/60 rounded-lg border border-purple-100"
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.1 }}
+                                  >
+                                    {topic.description}
+                                  </motion.p>
+                                )}
+
+                                {topicMaterials.length === 0 ? (
+                                  <motion.p
+                                    className="text-sm text-gray-500 text-center py-6 bg-white/50 rounded-lg"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                  >
+                                    No materials added yet
+                                  </motion.p>
+                                ) : (
+                                  <motion.div
+                                    className="space-y-3"
+                                    variants={staggerContainer}
+                                    initial="hidden"
+                                    animate="visible"
+                                  >
+                                    {topicMaterials.map((material, matIndex) => {
+                                      const iconData = getMaterialIcon(material.materialType)
+                                      const isLocked = isStudent && !isEnrolled
+
+                                      return (
+                                        <motion.div
+                                          key={material.id}
+                                          className={`relative flex items-center justify-between p-4 bg-white rounded-xl border-2 transition-all duration-300 group ${isLocked
+                                            ? 'opacity-60 cursor-not-allowed border-gray-200'
+                                            : 'hover:border-purple-300 hover:shadow-lg cursor-pointer border-gray-200'
+                                            }`}
+                                          onClick={() => handleMaterialClick(material, topic.id)}
+                                          variants={fadeInUp}
+                                          whileHover={!isLocked ? { y: -2, scale: 1.01 } : {}}
+                                          transition={{ type: "spring", stiffness: 300 }}
+                                        >
+                                          <div className="flex items-center space-x-4 flex-1 min-w-0">
+                                            {/* Completion Checkbox */}
+                                            {isStudent && isEnrolled && (
+                                              <motion.div
+                                                onClick={(e) => {
+                                                  const isTimerRestricted = material.materialType === 'VIDEO' || ((material.materialType === 'PDF' || material.materialType === 'TEXT') && material.durationMinutes > 0);
+                                                  if (!isTimerRestricted) {
+                                                    handleToggleMaterial(material.id, e);
+                                                  }
+                                                }}
+                                                className={`cursor-pointer transition-all duration-300 ${(material.materialType === 'VIDEO' || ((material.materialType === 'PDF' || material.materialType === 'TEXT') && material.durationMinutes > 0))
+                                                  ? (completedMaterialIds.has(material.id) ? "text-green-500 cursor-default" : "text-gray-300 cursor-default")
+                                                  : "text-gray-400 hover:text-green-500 hover:scale-110"
+                                                  }`}
+                                                title={
+                                                  (material.materialType === 'VIDEO' || ((material.materialType === 'PDF' || material.materialType === 'TEXT') && material.durationMinutes > 0))
+                                                    ? (completedMaterialIds.has(material.id) ? "Completed" : "View content to complete")
+                                                    : (completedMaterialIds.has(material.id) ? "Mark as incomplete" : "Mark as done")
+                                                }
+                                                whileHover={{ scale: 1.1 }}
+                                                whileTap={{ scale: 0.9 }}
+                                              >
+                                                {completedMaterialIds.has(material.id) ? (
+                                                  <CheckCircle
+                                                    size={26}
+                                                    className="text-green-500 fill-green-100"
+                                                  />
+                                                ) : (
+                                                  <Circle
+                                                    size={26}
+                                                    className="text-gray-300 group-hover:text-purple-300 transition-colors"
+                                                  />
+                                                )}
+                                              </motion.div>
+                                            )}
+
+                                            {/* Material Icon */}
+                                            <motion.div
+                                              className={`${iconData.bg} p-3 rounded-xl relative flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow`}
+                                              whileHover={{ rotate: 5, scale: 1.05 }}
+                                            >
+                                              <div className={iconData.color}>
+                                                {iconData.component}
+                                              </div>
+                                              {isLocked && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-sm">
+                                                  <Lock size={16} className="text-gray-700" />
+                                                </div>
+                                              )}
+                                            </motion.div>
+
+                                            {/* Material Info */}
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2">
+                                                <p className="font-semibold text-gray-900 truncate group-hover:text-purple-900 transition-colors">
+                                                  {material.title}
+                                                </p>
+                                                {isLocked && (
+                                                  <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full flex-shrink-0 font-medium">
+                                                    🔒 Locked
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                                                <span className="capitalize font-medium px-2 py-0.5 bg-gray-100 rounded-full">
+                                                  {material.materialType.toLowerCase()}
+                                                </span>
+                                                {material.durationMinutes && (
+                                                  <>
+                                                    <span>•</span>
+                                                    <span className="flex items-center gap-1">
+                                                      <Clock size={12} />
+                                                      {material.durationMinutes} min
+                                                    </span>
+                                                  </>
+                                                )}
+                                                {material.responsible && (
+                                                  <>
+                                                    <span>•</span>
+                                                    <span className="truncate max-w-[100px]">{material.responsible}</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Instructor Actions */}
+                                          {isInstructor && (
+                                            <div className="relative ml-2" onClick={(e) => e.stopPropagation()}>
+                                              <button
+                                                onClick={() => setActiveMenuId(activeMenuId === material.id ? null : material.id)}
+                                                className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
+                                              >
+                                                <MoreVertical size={18} />
+                                              </button>
+
+                                              {activeMenuId === material.id && (
+                                                <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                                  <button
+                                                    onClick={() => handleEditMaterial(material, topic.id)}
+                                                    className="w-full text-left px-4 py-2 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-2 transition-colors"
+                                                  >
+                                                    <Edit size={14} className="text-purple-600" /> Edit
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      handleDeleteMaterial(material.id, topic.id)
+                                                      setActiveMenuId(null)
+                                                    }}
+                                                    className="w-full text-left px-4 py-2 hover:bg-red-50 text-sm text-red-600 flex items-center gap-2 transition-colors"
+                                                  >
+                                                    <Trash2 size={14} /> Delete
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </motion.div>
+                                      )
+                                    })}
+                                  </motion.div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    )
+                  })}
+                </motion.div>
+              )}
+            </Card>
+          </motion.div>
 
           {/* Review Section */}
           <div id="review-section" className="scroll-mt-20">
@@ -1793,7 +1968,7 @@ const CourseDetail = () => {
               </div>
             </div>
           </Card>
-        </div>
+        </div >
       </div >
 
       {/* Topic Modal */}
@@ -2157,15 +2332,23 @@ const CourseDetail = () => {
               <MaterialViewer
                 material={selectedMaterial}
                 topicId={selectedMaterial?.topicId}
-                onClose={() => setSelectedMaterial(null)}
+                onClose={() => {
+                  setSelectedMaterial(null);
+                  fetchMaterialProgress(); // Re-fetch completed items
+                  fetchTopicProgress();
+                  loadProgress(courseId, topics); // Sync progress bar
+                }}
                 onComplete={(materialId) => {
-                  console.log("Material completed:", materialId);
-                  // Update local state to show green check
+                  console.log("Material completed callback triggered:", materialId);
+                  // Update local state to show green check immediately
                   setCompletedMaterialIds(prev => {
                     const newSet = new Set(prev);
                     newSet.add(materialId);
                     return newSet;
                   });
+                  // Also fetch from backend to be sure
+                  fetchMaterialProgress();
+                  loadProgress(courseId, topics); // Sync progress bar
                 }}
               />
             )}
