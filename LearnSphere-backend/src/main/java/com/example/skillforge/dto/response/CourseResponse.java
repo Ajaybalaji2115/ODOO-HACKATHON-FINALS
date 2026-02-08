@@ -44,4 +44,5 @@ public class CourseResponse {
     private Double price;
 
     private String category; // Added missing category field
+    private String suggestionReason; // Dynamic AI reason for recommendation
 }

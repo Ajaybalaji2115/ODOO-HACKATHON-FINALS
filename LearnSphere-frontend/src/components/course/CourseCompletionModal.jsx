@@ -128,15 +128,30 @@ const CourseCompletionModal = ({
                                         {recommendation.title}
                                     </h3>
 
-                                    <div className="flex items-center gap-1 mb-6">
+                                    <div className="flex items-center gap-1 mb-4">
                                         {[1, 2, 3, 4, 5].map(i => (
                                             <Star key={i} size={16} className="text-amber-400 fill-amber-400" />
                                         ))}
                                         <span className="text-slate-400 text-sm ml-2 font-medium">(4.9)</span>
                                     </div>
 
-                                    <p className="text-slate-500 text-sm line-clamp-2 mb-8">
-                                        Continue your learning journey with this highly rated course selected just for you.
+                                    {/* Dynamic AI Reason */}
+                                    {recommendation.suggestionReason && (
+                                        <div className="mb-6 bg-blue-50 border border-blue-100 p-3 rounded-lg flex gap-3">
+                                            <div className="mt-0.5 shrink-0">
+                                                <Sparkles size={16} className="text-blue-600 fill-blue-100" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-1">Why AI Chose This</p>
+                                                <p className="text-sm text-slate-700 leading-snug">
+                                                    {recommendation.suggestionReason}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <p className="text-slate-500 text-sm line-clamp-2 mb-6">
+                                        {recommendation.description || "Continue your learning journey with this highly rated course selected just for you."}
                                     </p>
 
                                     <div className="mt-auto">
