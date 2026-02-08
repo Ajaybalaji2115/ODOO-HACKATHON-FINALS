@@ -15,7 +15,7 @@ import QuizBuilder from '../quiz/QuizBuilder'
 import {
   ArrowLeft, BookOpen, Users, Clock, Award, Play, FileText,
   CheckCircle, Plus, Edit, Trash2, Upload, ChevronDown, ChevronUp, X, Eye,
-  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles, Circle
+  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles, Circle, Star, ArrowRight
 } from 'lucide-react'
 import Card from '../common/Card'
 import Loader from '../common/Loader'
@@ -29,9 +29,6 @@ import CertificateDownload from '../certificate/CertificateDownload'
 import ConfirmModal from '../common/ConfirmModal'
 import ReviewSection from './ReviewSection'
 import CourseReviewModal from './CourseReviewModal'
-import AnimatedBackground from '../common/AnimatedBackground'
-import CircularProgress from '../common/CircularProgress'
-import { fadeInUp, fadeIn, scaleIn, staggerContainer, slideInLeft, slideInRight } from '../../utils/animations'
 
 
 const CourseDetail = () => {
@@ -775,8 +772,8 @@ const CourseDetail = () => {
         title: materialForm.title,
         description: materialForm.description,
         responsible: materialForm.responsible,
-        durationMinutes: (materialForm.durationMinutes !== '' && materialForm.durationMinutes !== null && materialForm.durationMinutes !== undefined) ? parseInt(materialForm.durationMinutes) : 0,
-        allowDownload: materialForm.allowDownload !== undefined ? materialForm.allowDownload : true
+        durationMinutes: materialForm.durationMinutes ? parseInt(materialForm.durationMinutes) : null,
+        allowDownload: materialForm.allowDownload
       }
 
       if (editingMaterial) {
@@ -1254,62 +1251,18 @@ const CourseDetail = () => {
             setShowCompletionModal(true); // Sequence to completion
           }}
           courseId={courseId}
+          courseTitle={course?.title} // V12: Pass Title for Context
           user={user}
         />
 
-        {/* 🔥 COMPLETION POPUP MODAL */}
-        {showCompletionModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 transition-all">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 text-white text-center">
-                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Award size={36} className="text-white" />
-                </div>
-                <h2 className="text-2xl font-bold">Course Completed!</h2>
-                <p className="text-green-100 mt-1">You've mastered {course.title}!</p>
-              </div>
-
-              <div className="p-6">
-                <h3 className="text-gray-900 font-bold text-lg mb-3">What's Next?</h3>
-
-                {nextCourseRecommendation ? (
-                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6 cursor-pointer hover:border-blue-300 transition" onClick={() => navigate(`/courses/${nextCourseRecommendation.id}`)}>
-                    <div className="flex gap-4">
-                      <img src={nextCourseRecommendation.thumbnailUrl} alt="" className="w-16 h-16 rounded-lg object-cover bg-gray-200" />
-                      <div>
-                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Recommended</p>
-                        <h4 className="font-bold text-gray-900 line-clamp-1">{nextCourseRecommendation.title}</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-500 bg-gray-200 px-1.5 rounded">{nextCourseRecommendation.difficultyLevel}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-sm mb-6">You're all set! Check the dashboard for more courses.</p>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" onClick={() => setShowCompletionModal(false)}>
-                    Close
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowCompletionModal(false); // Close explicitly
-                      if (nextCourseRecommendation) {
-                        navigate(`/courses/${nextCourseRecommendation.id}`);
-                      } else {
-                        navigate('/dashboard');
-                      }
-                    }}
-                  >
-                    {nextCourseRecommendation ? "Start Next Course" : "Go to Dashboard"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 🔥 COMPLETION POPUP MODAL - NEW PREMIUM VERSION */}
+        <CourseCompletionModal
+          isOpen={showCompletionModal}
+          onClose={() => setShowCompletionModal(false)}
+          courseTitle={course?.title}
+          recommendation={nextCourseRecommendation}
+          onNavigate={navigate}
+        />
 
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
@@ -1593,150 +1546,63 @@ const CourseDetail = () => {
                     const materialCount = materialCounts[topic.id] ?? topic.materialsCount ?? 0
                     const isExpanded = expandedTopic === topic.id
 
-                    return (
-                      <motion.div
-                        key={topic.id}
-                        className="border-2 border-gray-200 rounded-2xl overflow-hidden bg-white shadow-md hover:shadow-xl transition-all duration-300"
-                        variants={fadeInUp}
-                        whileHover={{ y: -2 }}
+                  return (
+                    <div key={topic.id} className="border border-gray-200 rounded-lg">
+                      <div
+                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                        onClick={() => toggleTopic(topic.id)}
                       >
-                        {/* Topic Header */}
-                        <div
-                          className="flex items-center justify-between p-5 cursor-pointer bg-gradient-to-r from-white to-purple-50/30 hover:from-purple-50/50 hover:to-pink-50/50 transition-all duration-300"
-                          onClick={() => toggleTopic(topic.id)}
-                        >
-                          <div className="flex items-center space-x-4 flex-1">
-                            {/* Topic Number Badge */}
-                            <motion.div
-                              className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
-                              whileHover={{ scale: 1.1, rotate: 5 }}
-                              transition={{ type: "spring", stiffness: 300 }}
-                            >
-                              <span className="text-white font-bold text-lg">{index + 1}</span>
-                            </motion.div>
-
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-3">
-                                <h3 className="font-bold text-gray-900 text-lg">{topic.name}</h3>
-                                {completedTopicIds.has(topic.id) && (
-                                  <motion.span
-                                    className="flex items-center text-green-600 text-xs font-bold bg-green-100 px-3 py-1 rounded-full border border-green-200"
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ type: "spring", stiffness: 500 }}
-                                  >
-                                    <CheckCircle size={14} className="mr-1" /> Completed
-                                  </motion.span>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-600 mt-1 flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1">
-                                  <FileText size={14} />
-                                  {materialCount} material{materialCount !== 1 ? 's' : ''}
-                                </span>
-                              </p>
-                            </div>
+                        <div className="flex items-center space-x-4 flex-1">
+                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-blue-600 font-bold">{index + 1}</span>
                           </div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h3 className="font-semibold text-gray-900">{topic.name}</h3>
 
-                          <div className="flex items-center space-x-2">
-                            {isInstructor && (
-                              <>
-                                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      console.log('Opening Modal for Topic:', topic.id)
-                                      setSelectedTopicForMaterial(topic.id)
-                                      setMaterialForm(prev => ({ ...prev, topicId: topic.id }))
-                                      setEditingMaterial(null)
-                                      setShowMaterialModal(true)
-                                    }}
-                                    variant="secondary"
-                                    size="sm"
-                                    icon={Plus}
-                                    className="shadow-sm hover:shadow-md transition-shadow"
-                                  >
-                                    Add Material
-                                  </Button>
-                                </motion.div>
-
-                                {/* Add Quiz Dropdown Button */}
-                                <motion.div
-                                  className="relative"
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                >
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setActiveMenuId(activeMenuId === `add-quiz-${topic.id}` ? null : `add-quiz-${topic.id}`)
-                                    }}
-                                    variant="primary"
-                                    size="sm"
-                                    icon={Award}
-                                    className="shadow-sm hover:shadow-md transition-shadow bg-purple-600 hover:bg-purple-700"
-                                  >
-                                    Add Quiz
-                                  </Button>
-
-                                  {/* Quiz Options Dropdown */}
-                                  {activeMenuId === `add-quiz-${topic.id}` && (
-                                    <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleOpenGenerateModal(topic.id)
-                                          setActiveMenuId(null)
-                                        }}
-                                        className="w-full text-left px-4 py-3 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-3 transition-colors border-b border-gray-100"
-                                      >
-                                        <Sparkles size={16} className="text-purple-600" />
-                                        <div>
-                                          <div className="font-medium">AI Quiz Generator</div>
-                                          <div className="text-xs text-gray-500">Auto-generate from content</div>
-                                        </div>
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleOpenMCQUploadModal(topic.id)
-                                          setActiveMenuId(null)
-                                        }}
-                                        className="w-full text-left px-4 py-3 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-3 transition-colors"
-                                      >
-                                        <Edit size={16} className="text-purple-600" />
-                                        <div>
-                                          <div className="font-medium">Manual Quiz Builder</div>
-                                          <div className="text-xs text-gray-500">Create questions manually</div>
-                                        </div>
-                                      </button>
-                                    </div>
-                                  )}
-                                </motion.div>
-
-                                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleDeleteTopic(topic.id)
-                                    }}
-                                    variant="danger"
-                                    size="sm"
-                                    icon={Trash2}
-                                    className="shadow-sm hover:shadow-md transition-shadow"
-                                  />
-                                </motion.div>
-                              </>
-                            )}
-                            <motion.div
-                              animate={{ rotate: isExpanded ? 180 : 0 }}
-                              transition={{ duration: 0.3 }}
-                              className="p-2 rounded-full hover:bg-purple-100 transition-colors"
-                            >
-                              <ChevronDown size={24} className="text-gray-600" />
-                            </motion.div>
+                            </div>
+                            <p className="text-sm text-gray-500">
+                              {materialCount} material{materialCount !== 1 ? 's' : ''}
+                            </p>
                           </div>
                         </div>
+                        <div className="flex items-center space-x-2">
+                          {isInstructor && (
+                            <>
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  console.log('Opening Modal for Topic:', topic.id)
+                                  setSelectedTopicForMaterial(topic.id)
+                                  setMaterialForm(prev => ({ ...prev, topicId: topic.id }))
+                                  setEditingMaterial(null)
+                                  setShowMaterialModal(true)
+                                }}
+                                variant="secondary"
+                                size="sm"
+                                icon={Plus}
+                              >
+                                Add Material
+                              </Button>
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteTopic(topic.id)
+                                }}
+                                variant="danger"
+                                size="sm"
+                                icon={Trash2}
+                              />
+                            </>
+                          )}
+                          {completedTopicIds.has(topic.id) && (
+                            <span className="flex items-center text-green-600 text-xs font-bold bg-green-100 px-2 py-0.5 rounded-full mr-3">
+                              <CheckCircle size={12} className="mr-1" /> Completed
+                            </span>
+                          )}
+                          {expandedTopic === topic.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </div>
 
                         {/* Materials Display - Animated Collapse */}
                         <AnimatePresence>
@@ -1886,127 +1752,17 @@ const CourseDetail = () => {
                                                 <MoreVertical size={18} />
                                               </button>
 
-                                              {activeMenuId === material.id && (
-                                                <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                                                  <button
-                                                    onClick={() => handleEditMaterial(material, topic.id)}
-                                                    className="w-full text-left px-4 py-2 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-2 transition-colors"
-                                                  >
-                                                    <Edit size={14} className="text-purple-600" /> Edit
-                                                  </button>
-                                                  <button
-                                                    onClick={() => {
-                                                      handleDeleteMaterial(material.id, topic.id)
-                                                      setActiveMenuId(null)
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 hover:bg-red-50 text-sm text-red-600 flex items-center gap-2 transition-colors"
-                                                  >
-                                                    <Trash2 size={14} /> Delete
-                                                  </button>
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
-                                        </motion.div>
-                                      )
-                                    })}
-                                  </motion.div>
-                                )}
-
-                                {/* Quiz Section - Display Quiz if exists for this topic */}
-                                {topicQuizzes[topic.id] && (
-                                  <motion.div
-                                    className="mt-4 pt-4 border-t border-purple-200"
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 0.2 }}
-                                  >
-                                    <div className="flex items-center justify-between mb-3">
-                                      <h4 className="font-semibold text-purple-900 flex items-center gap-2">
-                                        <Award size={18} className="text-purple-600" />
-                                        Quiz Assessment
-                                      </h4>
-                                    </div>
-
-                                    <motion.div
-                                      className={`relative flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border-2 transition-all duration-300 group ${isStudent && !isEnrolled
-                                        ? 'opacity-60 cursor-not-allowed border-purple-200'
-                                        : 'hover:border-purple-400 hover:shadow-lg cursor-pointer border-purple-300'
-                                        }`}
-                                      onClick={() => handleQuizClick(topic)}
-                                      whileHover={isStudent && !isEnrolled ? {} : { y: -2, scale: 1.01 }}
-                                      transition={{ type: "spring", stiffness: 300 }}
-                                    >
-                                      <div className="flex items-center space-x-4 flex-1">
-                                        {/* Quiz Icon */}
-                                        <motion.div
-                                          className="bg-purple-100 p-3 rounded-xl relative flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
-                                          whileHover={{ rotate: 5, scale: 1.05 }}
-                                        >
-                                          <Award size={24} className="text-purple-600" />
-                                          {isStudent && !isEnrolled && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-sm">
-                                              <Lock size={16} className="text-gray-700" />
-                                            </div>
-                                          )}
-                                        </motion.div>
-
-                                        {/* Quiz Info */}
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2">
-                                            <p className="font-semibold text-gray-900 truncate group-hover:text-purple-900 transition-colors">
-                                              {topicQuizzes[topic.id].title}
-                                            </p>
-                                            {isStudent && !isEnrolled && (
-                                              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full flex-shrink-0 font-medium">
-                                                🔒 Locked
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
-                                            <span className="capitalize font-medium px-2 py-0.5 bg-purple-100 rounded-full">
-                                              Quiz
-                                            </span>
-                                            {topicQuizzes[topic.id].duration && (
-                                              <>
-                                                <span>•</span>
-                                                <span className="flex items-center gap-1">
-                                                  <Clock size={12} />
-                                                  {topicQuizzes[topic.id].duration} min
-                                                </span>
-                                              </>
-                                            )}
-                                            {topicQuizzes[topic.id].questions?.length && (
-                                              <>
-                                                <span>•</span>
-                                                <span>{topicQuizzes[topic.id].questions.length} questions</span>
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* Instructor Actions for Quiz */}
-                                      {isInstructor && (
-                                        <div className="relative ml-2" onClick={(e) => e.stopPropagation()}>
-                                          <button
-                                            onClick={() => setActiveMenuId(activeMenuId === `quiz-${topic.id}` ? null : `quiz-${topic.id}`)}
-                                            className="p-1.5 hover:bg-purple-100 rounded-full text-gray-500 transition-colors"
-                                          >
-                                            <MoreVertical size={18} />
-                                          </button>
-
-                                          {activeMenuId === `quiz-${topic.id}` && (
+                                          {activeMenuId === material.id && (
                                             <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                                               <button
-                                                onClick={() => handleEditQuiz(topicQuizzes[topic.id], topic.id)}
+                                                onClick={() => handleEditMaterial(material, topic.id)}
                                                 className="w-full text-left px-4 py-2 hover:bg-purple-50 text-sm text-gray-700 flex items-center gap-2 transition-colors"
                                               >
                                                 <Edit size={14} className="text-purple-600" /> Edit
                                               </button>
                                               <button
                                                 onClick={() => {
-                                                  handleDeleteQuiz(topicQuizzes[topic.id].id, topic.id)
+                                                  handleDeleteMaterial(material.id, topic.id)
                                                   setActiveMenuId(null)
                                                 }}
                                                 className="w-full text-left px-4 py-2 hover:bg-red-50 text-sm text-red-600 flex items-center gap-2 transition-colors"
@@ -2017,20 +1773,109 @@ const CourseDetail = () => {
                                           )}
                                         </div>
                                       )}
-                                    </motion.div>
-                                  </motion.div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ===== NEW: Quiz Section (right under materials list) ===== */}
+                          <div className="p-4 border-t border-gray-200 bg-gradient-to-r from-purple-50 to-white">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                {/* Quiz Completion Radio Button */}
+                                {isStudent && isEnrolled && topicQuizzes[topic.id] && (
+                                  <div
+                                    onClick={(e) => handleToggleMaterial(topicQuizzes[topic.id].id, e)}
+                                    className="cursor-pointer mr-1 text-gray-400 hover:text-green-500 transition-colors"
+                                    title={completedMaterialIds.has(topicQuizzes[topic.id].id) ? "Mark as incomplete" : "Mark as done"}
+                                  >
+                                    <CheckCircle
+                                      size={24}
+                                      className={completedMaterialIds.has(topicQuizzes[topic.id].id) ? "text-green-500 fill-green-100" : "text-gray-300"}
+                                    />
+                                  </div>
+                                )}
+                                <div className="w-12 h-12 rounded-lg bg-purple-600 text-white flex items-center justify-center">
+                                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    <path d="M20 12a8 8 0 11-16 0 8 8 0 0116 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                </div>
+                                <div>
+                                  <h4 className="text-lg font-semibold text-gray-900">Quiz</h4>
+                                  <p className="text-sm text-gray-600">Test your understanding of this topic</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                {isStudent && (
+                                  <Button
+                                    onClick={() => handleQuizClick(topic)}
+                                    variant={!isEnrolled ? "secondary" : "primary"}
+                                    size="sm"
+                                    icon={!isEnrolled ? undefined : Play}
+                                    disabled={!isEnrolled}
+                                    className={!isEnrolled ? "opacity-60 cursor-not-allowed" : ""}
+                                  >
+                                    {!isEnrolled ? '🔒 Locked' : 'Start Quiz'}
+                                  </Button>
+                                )}
+
+                                {isInstructor && (
+                                  <>
+                                    <Button
+                                      onClick={() => handleOpenGenerateModal(topic.id)}
+                                      variant="secondary"
+                                      size="sm"
+                                      className="bg-white border border-purple-300 text-purple-700 hover:bg-purple-50"
+                                    >
+                                      Generate
+                                    </Button>
+
+                                    <Button
+                                      onClick={() => handleOpenMCQUploadModal(topic.id)}
+                                      variant="secondary"
+                                      size="sm"
+                                      icon={Upload}
+                                      className="bg-white border border-blue-300 text-blue-700 hover:bg-blue-50"
+                                      title="Upload MCQ questions manually"
+                                    >
+                                      Upload MCQ
+                                    </Button>
+
+
+                                    <Button
+                                      onClick={() => handleViewQuiz(topic)}
+                                      variant="secondary"
+                                      size="sm"
+                                      icon={Eye}
+                                    >
+                                      View Quiz
+                                    </Button>
+
+                                  </>
                                 )}
                               </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    )
-                  })}
-                </motion.div>
-              )}
-            </Card>
-          </motion.div>
+                            </div>
+
+                            {/* Small hint line */}
+                            <p className="mt-3 text-xs text-gray-500">
+                              {isInstructor ? 'Generate a quiz using AI or view the latest saved quiz (read-only).' :
+                                isEnrolled ? 'Start the latest quiz for this topic. If no quiz exists ask your instructor to generate one.' :
+                                  '🔒 Enroll in this course to access quizzes and test your knowledge.'}
+                            </p>
+                          </div>
+                          {/* ===== end quiz section ===== */}
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
 
           {/* Review Section */}
           <div id="review-section" className="scroll-mt-20">
@@ -2521,8 +2366,8 @@ const CourseDetail = () => {
           <>
             {selectedMaterial.materialType === 'QUIZ' ? (
               <QuizPlayer
-                quiz={selectedMaterial.quiz}
-                onClose={() => setSelectedMaterial(null)}
+                quizId={selectedMaterial.quiz.id}
+                topicId={selectedMaterial.topicId}
               />
             ) : (
               <MaterialViewer

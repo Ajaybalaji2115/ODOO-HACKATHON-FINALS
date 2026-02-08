@@ -174,13 +174,53 @@ public class CourseController {
     public ResponseEntity<ApiResponse<CourseResponse>> getNextCourseRecommendation(
             @PathVariable Long courseId,
             @RequestParam(required = false) Long studentId) {
+
+        // 1. Get the completed course details for context
+        // We need the entity to compare levels/categories
+        // Assuming getting by ID is safe here as courseId exists
+        // Since we don't have direct repository access here easily without autowiring,
+        // and getCourseById returns a DTO, let's use the service if possible or just rely on the recommendation logic.
+        // Actually, best to modify the service to return the reason, OR deduce it here.
+        // To deduce it, I need the 'current' course. Let's fetch it via existing service method.
+        CourseResponse completedCourseDto = courseService.getCourseById(courseId, studentId);
+
         com.example.skillforge.model.entity.Course nextCourse = courseRecommendationService
                 .recommendNextCourse(courseId, studentId);
+
         if (nextCourse == null) {
             return ResponseEntity.ok(ApiResponse.success("No specific recommendation found", null));
         }
-        // Map to response (simplified mapping here, ideally use mapper)
+
+        // Map to response
         CourseResponse response = mapToResponse(nextCourse);
+
+        // 2. LOGIC TO GENERATE DYNAMIC REASON
+        String reason = "Recommended for you based on your learning path."; // Default
+
+        if (completedCourseDto != null) {
+            String currentLevel = String.valueOf(completedCourseDto.getDifficultyLevel());
+            String nextLevel = String.valueOf(nextCourse.getDifficultyLevel());
+            String currentCategory = completedCourseDto.getCategory(); // Ensure DTO has category!
+            String nextCategory = nextCourse.getCategory();
+
+            if (currentCategory != null && currentCategory.equals(nextCategory)) {
+                if (!currentLevel.equals(nextLevel)) {
+                    // Level Up Scenario
+                    reason = "Level Up! You've mastered " + currentLevel + ", now challenge yourself with " + nextLevel + ".";
+                } else {
+                    // Deep Dive Scenario
+                    reason = "Deep Dive! Continue your journey in " + currentCategory + " to build expertise.";
+                }
+            } else {
+                // Cross-Category / Related
+                reason = "Expand Your Horizons! Since you liked " + completedCourseDto.getTitle() + ", we think you'll love this.";
+            }
+
+            // Override if it's a "Popular" fallback (harder to detect without flag, but we can guess if categories differ significantly)
+        }
+
+        response.setSuggestionReason(reason);
+
         return ResponseEntity.ok(ApiResponse.success("Next course recommendation", response));
     }
 
