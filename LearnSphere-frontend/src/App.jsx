@@ -1,6 +1,3 @@
-// Author: Gowtham B
-// LearnSphere-Platform – AI-Driven Adaptive Learning and Exam Generator
-
 
 // src/App.jsx
 import React from 'react'
@@ -57,9 +54,8 @@ function App() {
   // Logic to hide footer on specific immersive/sensitive pages
   // - Quiz Play/Intro: prevent distraction during assessment
   // - Auth Pages: focused entry points
-  // - Course Sub-pages (Detail, Create, Edit): maximizes workspace, avoids accidental exit
   // - Verification: clean, standalone proof page
-  const hideFooterPrefixes = ['/quiz/play', '/quiz/intro', '/login', '/register', '/forgot-password', '/reset-password', '/verify', '/verify-otp', '/dashboard', '/courses']
+  const hideFooterPrefixes = ['/quiz/play', '/quiz/intro', '/login', '/register', '/forgot-password', '/reset-password', '/verify', '/verify-otp']
   let shouldHideFooter = hideFooterPrefixes.some(prefix => location.pathname.startsWith(prefix))
 
   // Also hide on ALL course sub-pages (Create, Edit, Detail)

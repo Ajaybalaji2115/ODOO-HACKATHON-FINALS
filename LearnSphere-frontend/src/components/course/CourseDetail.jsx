@@ -13,7 +13,7 @@ import QuizBuilder from '../quiz/QuizBuilder'
 import {
   ArrowLeft, BookOpen, Users, Clock, Award, Play, FileText,
   CheckCircle, Plus, Edit, Trash2, Upload, ChevronDown, ChevronUp, X, Eye,
-  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles, Circle
+  MoreVertical, File, Download, Link as LinkIcon, Lock, IndianRupee, Sparkles, Circle, Star, ArrowRight
 } from 'lucide-react'
 import Card from '../common/Card'
 import Loader from '../common/Loader'
@@ -27,6 +27,7 @@ import CertificateDownload from '../certificate/CertificateDownload'
 import ConfirmModal from '../common/ConfirmModal'
 import ReviewSection from './ReviewSection'
 import CourseReviewModal from './CourseReviewModal'
+import CourseCompletionModal from './CourseCompletionModal'
 
 
 const CourseDetail = () => {
@@ -1157,62 +1158,18 @@ const CourseDetail = () => {
             setShowCompletionModal(true); // Sequence to completion
           }}
           courseId={courseId}
+          courseTitle={course?.title} // V12: Pass Title for Context
           user={user}
         />
 
-        {/* 🔥 COMPLETION POPUP MODAL */}
-        {showCompletionModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 transition-all">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 text-white text-center">
-                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Award size={36} className="text-white" />
-                </div>
-                <h2 className="text-2xl font-bold">Course Completed!</h2>
-                <p className="text-green-100 mt-1">You've mastered {course.title}!</p>
-              </div>
-
-              <div className="p-6">
-                <h3 className="text-gray-900 font-bold text-lg mb-3">What's Next?</h3>
-
-                {nextCourseRecommendation ? (
-                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6 cursor-pointer hover:border-blue-300 transition" onClick={() => navigate(`/courses/${nextCourseRecommendation.id}`)}>
-                    <div className="flex gap-4">
-                      <img src={nextCourseRecommendation.thumbnailUrl} alt="" className="w-16 h-16 rounded-lg object-cover bg-gray-200" />
-                      <div>
-                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wide mb-1">Recommended</p>
-                        <h4 className="font-bold text-gray-900 line-clamp-1">{nextCourseRecommendation.title}</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-500 bg-gray-200 px-1.5 rounded">{nextCourseRecommendation.difficultyLevel}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-sm mb-6">You're all set! Check the dashboard for more courses.</p>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" onClick={() => setShowCompletionModal(false)}>
-                    Close
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowCompletionModal(false); // Close explicitly
-                      if (nextCourseRecommendation) {
-                        navigate(`/courses/${nextCourseRecommendation.id}`);
-                      } else {
-                        navigate('/dashboard');
-                      }
-                    }}
-                  >
-                    {nextCourseRecommendation ? "Start Next Course" : "Go to Dashboard"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 🔥 COMPLETION POPUP MODAL - NEW PREMIUM VERSION */}
+        <CourseCompletionModal
+          isOpen={showCompletionModal}
+          onClose={() => setShowCompletionModal(false)}
+          courseTitle={course?.title}
+          recommendation={nextCourseRecommendation}
+          onNavigate={navigate}
+        />
 
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
