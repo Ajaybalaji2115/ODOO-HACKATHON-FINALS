@@ -1019,7 +1019,7 @@ public class CertificateService {
                 ColumnText.showTextAligned(
                                 canvas,
                                 Element.ALIGN_CENTER,
-                                new Phrase("Mantavya Gajjar", signNameFont),
+                                new Phrase("Shardul Dave", signNameFont),
                                 sigCenterX,
                                 sigBaseY,
                                 0);

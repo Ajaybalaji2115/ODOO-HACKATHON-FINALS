@@ -2107,8 +2107,8 @@ const CourseDetail = () => {
           <>
             {selectedMaterial.materialType === 'QUIZ' ? (
               <QuizPlayer
-                quiz={selectedMaterial.quiz}
-                onClose={() => setSelectedMaterial(null)}
+                quizId={selectedMaterial.quiz.id}
+                topicId={selectedMaterial.topicId}
               />
             ) : (
               <MaterialViewer
