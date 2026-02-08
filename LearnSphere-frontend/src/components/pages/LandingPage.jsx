@@ -5,6 +5,9 @@ import { BookOpen, Users, GraduationCap, ArrowRight, CheckCircle, Globe, Shield,
 import Button from '../common/Button'
 import PublicNavbar from '../layout/PublicNavbar'
 
+import NeuralBackground from './NeuralBackground'
+import NeuralText from './NeuralText'
+
 const LandingPage = () => {
     const { isAuthenticated } = useSelector((state) => state.auth)
     const navigate = useNavigate()
@@ -16,6 +19,9 @@ const LandingPage = () => {
 
             {/* Hero Section - Compact to fit visible area */}
             <div className="relative pt-24 pb-12 lg:pt-32 lg:pb-16 overflow-hidden min-h-[90vh] flex flex-col justify-center bg-gradient-to-b from-indigo-50 via-white to-white">
+                {/* Neural Background Animation */}
+                <NeuralBackground />
+
                 {/* Background Grid Pattern */}
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] -z-10"></div>
 
@@ -37,9 +43,9 @@ const LandingPage = () => {
 
                     <h1 className="text-5xl md:text-6xl font-black text-gray-900 tracking-tight mb-6 leading-tight animate-fade-in-up [animation-delay:200ms]">
                         Master Skills with <br />
-                        <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-gradient-x">
+                        <NeuralText className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600">
                             AI-Driven Learning
-                        </span>
+                        </NeuralText>
                     </h1>
 
                     <p className="text-lg md:text-xl text-gray-700 max-w-3xl mx-auto mb-8 leading-relaxed animate-fade-in-up [animation-delay:400ms] font-medium">

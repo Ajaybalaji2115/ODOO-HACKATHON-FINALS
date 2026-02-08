@@ -59,7 +59,7 @@ function App() {
   // - Auth Pages: focused entry points
   // - Course Sub-pages (Detail, Create, Edit): maximizes workspace, avoids accidental exit
   // - Verification: clean, standalone proof page
-  const hideFooterPrefixes = ['/quiz/play', '/quiz/intro', '/login', '/register', '/forgot-password', '/reset-password', '/verify', '/verify-otp']
+  const hideFooterPrefixes = ['/quiz/play', '/quiz/intro', '/login', '/register', '/forgot-password', '/reset-password', '/verify', '/verify-otp', '/dashboard', '/courses']
   let shouldHideFooter = hideFooterPrefixes.some(prefix => location.pathname.startsWith(prefix))
 
   // Also hide on ALL course sub-pages (Create, Edit, Detail)
