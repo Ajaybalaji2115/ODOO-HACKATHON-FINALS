@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
 import { CheckCircle2, XCircle, ShieldCheck, Calendar, Hash, User, BookOpen, Loader2, ArrowRight } from 'lucide-react'
-
+//Cetificate
 const CertificateVerify = () => {
     const { uid } = useParams()
     const [certificate, setCertificate] = useState(null)
